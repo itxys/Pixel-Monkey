@@ -33,6 +33,7 @@ const App: React.FC = () => {
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pan');
   const [brushColor, setBrushColor] = useState<string>('#ffb000');
+  const [brushSize, setBrushSize] = useState<number>(1); // 笔刷大小，默认为1
 
   const createLayer = (name: string): Layer => ({
     id: crypto.randomUUID(),
@@ -194,6 +195,8 @@ const App: React.FC = () => {
          setActiveTool={setActiveTool}
          brushColor={brushColor}
          setBrushColor={setBrushColor}
+         brushSize={brushSize}
+         setBrushSize={setBrushSize}
          language={language}
          project={project}
          setProject={setProject}
@@ -210,6 +213,8 @@ const App: React.FC = () => {
             setActiveTool={setActiveTool}
             brushColor={brushColor}
             setBrushColor={setBrushColor}
+            brushSize={brushSize}
+            setBrushSize={setBrushSize}
             project={project}
             setProject={setProject}
             activeLayer={activeLayer}

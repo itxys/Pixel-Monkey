@@ -7,6 +7,8 @@ interface ToolboxProps {
   setActiveTool: (tool: DrawingTool) => void;
   brushColor: string;
   setBrushColor: (color: string) => void;
+  brushSize: number;
+  setBrushSize: React.Dispatch<React.SetStateAction<number>>;
   language: Language;
   project: ProjectState;
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
@@ -61,6 +63,8 @@ export const Toolbox: React.FC<ToolboxProps> = ({
   setActiveTool,
   brushColor,
   setBrushColor,
+  brushSize,
+  setBrushSize,
   language,
   project,
   setProject
@@ -178,6 +182,39 @@ export const Toolbox: React.FC<ToolboxProps> = ({
               <ToolButton tool="eyedropper" icon={Pipette} label="PICK" colorClass="#d946ef" />
               <ToolButton tool="pan" icon={Hand} label="PAN" colorClass="#00cccc" />
               <ToolButton tool="move" icon={Move} label="MOVE" colorClass="#00cccc" />
+           </div>
+        </div>
+
+        {/* Brush Size */}
+        <div className="p-3 bg-[#111] border-b border-[#333]">
+           <div className="text-[#00cccc] text-[10px] font-bold tracking-widest mb-2 border-l-2 border-[#00cccc] pl-2">BRUSH SIZE</div>
+           <div className="flex items-center gap-2">
+              <button 
+                 onClick={() => setBrushSize(prev => Math.max(1, prev - 1))}
+                 className="p-1 bg-[#222] border border-[#333] text-[#00cccc] hover:bg-[#333] w-6 h-6 flex items-center justify-center"
+                 title="Decrease brush size ([])"
+              >
+                 -
+              </button>
+              <input 
+                 type="range" 
+                 min="1" 
+                 max="10" 
+                 step="1" 
+                 value={brushSize}
+                 onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                 className="flex-1 h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rounded-none"
+              />
+              <button 
+                 onClick={() => setBrushSize(prev => Math.min(10, prev + 1))}
+                 className="p-1 bg-[#222] border border-[#333] text-[#00cccc] hover:bg-[#333] w-6 h-6 flex items-center justify-center"
+                 title="Increase brush size (])"
+              >
+                 +
+              </button>
+           </div>
+           <div className="text-center text-xs text-[#00cccc] mt-1">
+              {brushSize}px
            </div>
         </div>
 

@@ -11,6 +11,8 @@ interface WorkstationProps {
   setActiveTool: (tool: DrawingTool) => void;
   brushColor: string;
   setBrushColor: (c: string) => void;
+  brushSize: number;
+  setBrushSize: React.Dispatch<React.SetStateAction<number>>;
   project: ProjectState;
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
   activeLayer: Layer;
@@ -215,6 +217,8 @@ export const Workstation: React.FC<WorkstationProps> = ({
   setActiveTool,
   brushColor,
   setBrushColor,
+  brushSize,
+  setBrushSize,
   project,
   setProject,
   activeLayer,
@@ -616,7 +620,6 @@ export const Workstation: React.FC<WorkstationProps> = ({
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
     const { x, y } = coords;
-    const key = `${x},${y}`;
 
     const updateLayer = (updateFn: (map: Map<string, number[]>) => void) => {
         const newData = new Map<string, number[]>(activeLayer.data);
@@ -626,9 +629,37 @@ export const Workstation: React.FC<WorkstationProps> = ({
 
     if (activeTool === 'brush') {
         const rgb = hexToRgb(brushColor);
-        updateLayer(map => map.set(key, rgb));
+        updateLayer(map => {
+            // Calculate brush area (square centered at x,y with size brushSize)
+            const halfSize = Math.floor(brushSize / 2);
+            for (let dx = -halfSize; dx <= halfSize; dx++) {
+                for (let dy = -halfSize; dy <= halfSize; dy++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    // Check if the pixel is within canvas bounds
+                    if (nx >= 0 && nx < generatedBaseData.width && ny >= 0 && ny < generatedBaseData.height) {
+                        const key = `${nx},${ny}`;
+                        map.set(key, rgb);
+                    }
+                }
+            }
+        });
     } else if (activeTool === 'eraser') {
-        updateLayer(map => map.delete(key));
+        updateLayer(map => {
+            // Calculate eraser area (square centered at x,y with size brushSize)
+            const halfSize = Math.floor(brushSize / 2);
+            for (let dx = -halfSize; dx <= halfSize; dx++) {
+                for (let dy = -halfSize; dy <= halfSize; dy++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    // Check if the pixel is within canvas bounds
+                    if (nx >= 0 && nx < generatedBaseData.width && ny >= 0 && ny < generatedBaseData.height) {
+                        const key = `${nx},${ny}`;
+                        map.delete(key);
+                    }
+                }
+            }
+        });
     } else if (activeTool === 'eyedropper') {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -861,6 +892,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
             setActiveTool('bucket');
         } else if (key === 'e') {
             setActiveTool('eraser');
+        } else if (key === '[') {
+            // Decrease brush size
+            e.preventDefault();
+            setBrushSize(prev => Math.max(1, prev - 1));
+        } else if (key === ']') {
+            // Increase brush size
+            e.preventDefault();
+            setBrushSize(prev => Math.min(10, prev + 1));
         }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -880,7 +919,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [activeTool, setActiveTool]);
+  }, [activeTool, setActiveTool, brushSize, setBrushSize]);
 
   // Mouse Wheel Zoom
   useEffect(() => {
@@ -958,9 +997,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
         className={`flex-1 flex items-center justify-center overflow-auto p-0 ${activeTool === 'pan' ? 'cursor-grab active:cursor-grabbing' : activeTool === 'eyedropper' ? 'cursor-crosshair' : activeTool === 'bucket' ? 'cursor-copy' : ''}`}
         style={{ 
             backgroundColor: '#050505',
-            // Create custom cursor with size relative to canvas zoom, similar to Aseprite
-            cursor: activeTool === 'brush' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${Math.min(zoom * 2, 16)}' height='${Math.min(zoom * 2, 16)}' viewBox='0 0 ${Math.min(zoom * 2, 16)} ${Math.min(zoom * 2, 16)}'%3E%3Crect width='${zoom}' height='${zoom}' fill='${brushColor.replace('#', '%23')}' x='${Math.min(zoom * 2, 16) / 2 - zoom / 2}' y='${Math.min(zoom * 2, 16) / 2 - zoom / 2}'/%3E%3C/svg%3E") ${Math.min(zoom * 2, 16) / 2} ${Math.min(zoom * 2, 16) / 2}, auto` : 
-                     activeTool === 'eraser' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${Math.min(zoom * 2, 16)}' height='${Math.min(zoom * 2, 16)}' viewBox='0 0 ${Math.min(zoom * 2, 16)} ${Math.min(zoom * 2, 16)}'%3E%3Crect width='${zoom}' height='${zoom}' fill='white' x='${Math.min(zoom * 2, 16) / 2 - zoom / 2}' y='${Math.min(zoom * 2, 16) / 2 - zoom / 2}'/%3E%3C/svg%3E") ${Math.min(zoom * 2, 16) / 2} ${Math.min(zoom * 2, 16) / 2}, auto` : 'auto'
+            // Create custom cursor with size relative to brush size and canvas zoom, similar to Aseprite
+            cursor: activeTool === 'brush' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${Math.min(brushSize * zoom * 2, 32)}' height='${Math.min(brushSize * zoom * 2, 32)}' viewBox='0 0 ${Math.min(brushSize * zoom * 2, 32)} ${Math.min(brushSize * zoom * 2, 32)}'%3E%3Crect width='${brushSize * zoom}' height='${brushSize * zoom}' fill='${brushColor.replace('#', '%23')}' x='${Math.min(brushSize * zoom * 2, 32) / 2 - brushSize * zoom / 2}' y='${Math.min(brushSize * zoom * 2, 32) / 2 - brushSize * zoom / 2}'/%3E%3C/svg%3E") ${Math.min(brushSize * zoom * 2, 32) / 2} ${Math.min(brushSize * zoom * 2, 32) / 2}, auto` : 
+                     activeTool === 'eraser' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${Math.min(brushSize * zoom * 2, 32)}' height='${Math.min(brushSize * zoom * 2, 32)}' viewBox='0 0 ${Math.min(brushSize * zoom * 2, 32)} ${Math.min(brushSize * zoom * 2, 32)}'%3E%3Crect width='${brushSize * zoom}' height='${brushSize * zoom}' fill='white' x='${Math.min(brushSize * zoom * 2, 32) / 2 - brushSize * zoom / 2}' y='${Math.min(brushSize * zoom * 2, 32) / 2 - brushSize * zoom / 2}'/%3E%3C/svg%3E") ${Math.min(brushSize * zoom * 2, 32) / 2} ${Math.min(brushSize * zoom * 2, 32) / 2}, auto` : 'auto'
         }}
       >
         {!sourceImage ? (
