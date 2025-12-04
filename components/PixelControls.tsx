@@ -6,7 +6,7 @@ interface PixelControlsProps {
   settings: PixelSettings;
   setSettings: React.Dispatch<React.SetStateAction<PixelSettings>>;
   processingState: ProcessingState;
-  onDownload: (scaled: boolean) => void;
+  onDownload: (mode: 'raw' | 'scaled' | 'standard', size?: number) => void;
   onAnalyze: () => void;
   onAiEdit: (prompt: string) => void;
   isAnalyzing: boolean;
@@ -44,6 +44,9 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
   
   const t = LABELS[language];
   const [aiPrompt, setAiPrompt] = useState('');
+  const [selectedSize, setSelectedSize] = useState<number>(32);
+  const standardSizes = [8, 16, 32, 64, 128, 256, 512, 1024];
+  const [showStandardSizes, setShowStandardSizes] = useState(false);
 
   const handleSettingChange = (key: keyof PixelSettings, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -254,13 +257,69 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
           <Sparkles className="w-3 h-3" />
           {isAnalyzing ? t.analyzing : t.analyze}
         </button>
-        <button
-            onClick={() => onDownload(true)}
-            className="w-full py-2 flex items-center justify-center gap-2 font-bold text-[10px] tracking-[0.2em] cassette-btn bg-[#ffb000]/10 border border-[#ffb000] text-[#ffb000] hover:bg-[#ffb000] hover:text-black"
+        
+        {/* 导出选项 */}
+        <div className="space-y-2">
+          <div className="text-[9px] text-[#ffb000] font-bold tracking-widest pb-1">EXPORT OPTIONS</div>
+          
+          {/* 原始尺寸导出 */}
+          <button
+            onClick={() => onDownload('raw')}
+            className="w-full py-1.5 flex items-center justify-center gap-2 font-bold text-[9px] tracking-[0.2em] cassette-btn bg-[#111] text-[#00cccc] border border-[#00cccc] hover:bg-[#00cccc] hover:text-black"
           >
-             <Download className="w-3 h-3" />
-            {t.saveScaled}
+            <ImageIcon className="w-2.5 h-2.5" />
+            {t.saveSmall || 'EXPORT [RAW]'}
           </button>
+          
+          {/* 高清自动缩放导出 */}
+          <button
+            onClick={() => onDownload('scaled')}
+            className="w-full py-1.5 flex items-center justify-center gap-2 font-bold text-[9px] tracking-[0.2em] cassette-btn bg-[#111] text-[#00cccc] border border-[#00cccc] hover:bg-[#00cccc] hover:text-black"
+          >
+            <Download className="w-2.5 h-2.5" />
+            {t.saveScaled || 'EXPORT [UPSCALED]'}
+          </button>
+          
+          {/* 标准尺寸导出 */}
+          <div className="space-y-1">
+            <div className="flex gap-1">
+              <button
+                onClick={() => setShowStandardSizes(!showStandardSizes)}
+                className="flex-1 py-1.5 flex items-center justify-center gap-2 font-bold text-[9px] tracking-[0.2em] cassette-btn bg-[#111] text-[#ffb000] border border-[#ffb000] hover:bg-[#ffb000] hover:text-black"
+              >
+                <Monitor className="w-2.5 h-2.5" />
+                STANDARD SIZE
+              </button>
+              <button
+                onClick={() => onDownload('standard', selectedSize)}
+                className="w-12 py-1.5 flex items-center justify-center gap-2 font-bold text-[9px] tracking-[0.2em] cassette-btn bg-[#111] text-[#ffb000] border border-[#ffb000] hover:bg-[#ffb000] hover:text-black"
+                title="Export to selected size"
+              >
+                {selectedSize}x
+              </button>
+            </div>
+            
+            {/* 标准尺寸选择器 */}
+            {showStandardSizes && (
+              <div className="grid grid-cols-4 gap-1 bg-[#111] p-1 cassette-border">
+                {standardSizes.map(size => (
+                  <button
+                    key={size}
+                    onClick={() => {
+                      setSelectedSize(size);
+                      // 自动关闭选择器
+                      setTimeout(() => setShowStandardSizes(false), 100);
+                    }}
+                    className={`py-1 px-0 font-bold text-[8px] tracking-widest ${selectedSize === size ? 'bg-[#ffb000] text-black' : 'bg-[#000] text-[#ccc] border border-[#333] hover:border-[#ffb000]'}`}
+                    title={`Export to ${size}x${size} pixels`}
+                  >
+                    {size}x
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -796,12 +796,16 @@ export const Workstation: React.FC<WorkstationProps> = ({
                 step="0.5" 
                 value={zoom}
                 onChange={(e) => setZoom(parseFloat(e.target.value))}
-                className="w-24 h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rotate-45"
+                className="w-24 h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rotate-[22.5deg]"
             />
             <ZoomIn className="w-4 h-4 text-[#00cccc]" />
         </div>
         <span className="text-xs font-mono text-white w-10 text-right">
             {Math.round(zoom * 100)}%
+        </span>
+        <div className="w-px bg-[#333] h-6 mx-1"></div>
+        <span className="text-xs font-mono text-[#ffb000] w-16 text-center">
+            {generatedBaseData ? `${generatedBaseData.width}x${generatedBaseData.height}` : '0x0'}
         </span>
         <button onClick={() => setZoom(1)} className="p-2 hover:bg-[#222] text-[#00cccc]" title="Reset">
             <Maximize className="w-4 h-4" />

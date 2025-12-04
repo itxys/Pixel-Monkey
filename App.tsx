@@ -130,16 +130,24 @@ const App: React.FC = () => {
     canvasRef.current = canvas;
   };
 
-  const handleDownload = (saveScaled: boolean) => {
+  /**
+   * 处理图片导出功能
+   * @param mode 导出模式：'raw'（原始尺寸）、'scaled'（自动缩放）、'standard'（标准尺寸）
+   * @param size 标准尺寸，如 16、32、64 等，仅在 mode 为 'standard' 时使用
+   */
+  const handleDownload = (mode: 'raw' | 'scaled' | 'standard' = 'raw', size?: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    if (!saveScaled) {
+    // 原始尺寸导出
+    if (mode === 'raw') {
       const link = document.createElement('a');
       link.download = `pixel-perfect-1x-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-    } else {
+    }
+    // 自动缩放导出
+    else if (mode === 'scaled') {
       const scaleFactor = Math.max(10, Math.floor(1024 / canvas.width)); 
       const displayCanvas = document.createElement('canvas');
       displayCanvas.width = canvas.width * scaleFactor;
@@ -152,6 +160,31 @@ const App: React.FC = () => {
         
         const link = document.createElement('a');
         link.download = `pixel-perfect-hd-${Date.now()}.png`;
+        link.href = displayCanvas.toDataURL('image/png');
+        link.click();
+      }
+    }
+    // 标准尺寸导出
+    else if (mode === 'standard' && size) {
+      const displayCanvas = document.createElement('canvas');
+      displayCanvas.width = size;
+      displayCanvas.height = size;
+      
+      const ctx = displayCanvas.getContext('2d');
+      if (ctx) {
+        ctx.imageSmoothingEnabled = false; 
+        
+        // 计算绘制位置，居中绘制
+        const x = (size - canvas.width) / 2;
+        const y = (size - canvas.height) / 2;
+        
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, size, size);
+        
+        ctx.drawImage(canvas, x, y);
+        
+        const link = document.createElement('a');
+        link.download = `pixel-perfect-${size}x${size}-${Date.now()}.png`;
         link.href = displayCanvas.toDataURL('image/png');
         link.click();
       }
