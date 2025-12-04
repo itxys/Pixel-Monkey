@@ -1,0 +1,5 @@
+{
+  "name": "Pixel Monkey",
+  "description": "Convert high-res images into crisp, true-pixel art without anti-aliasing artifacts. Features real-time pixelation control, color palette reduction, and AI-powered pixel art analysis.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,187 @@
+
+
+export type Language = 'en' | 'zh';
+
+export type DrawingTool = 'pan' | 'brush' | 'eraser' | 'eyedropper' | 'bucket' | 'move';
+
+export interface HSLAdjustment {
+  brightness: number; // -100 to 100
+  saturation: number; // -100 to 100
+  hue: number;        // -180 to 180
+}
+
+export interface PixelSettings {
+  pixelSize: number; 
+  scale: number;
+  isGrayscale: boolean;
+  paletteSize: number;
+  contrast: number; 
+  smoothing: number; 
+  dithering: number; 
+  outlineColor: string; 
+  hasOutline: boolean; 
+  outlineThickness: number;
+  hsl: HSLAdjustment;
+}
+
+export interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  data: Map<string, number[]>; // x,y -> [r,g,b]
+}
+
+export interface Frame {
+  id: string;
+  layers: Layer[];
+}
+
+export interface ProjectState {
+  frames: Frame[];
+  currentFrameIndex: number;
+  activeLayerId: string;
+  fps: number;
+  onionSkin: boolean;
+  isPlaying: boolean;
+  savedColors: string[]; // List of hex codes
+}
+
+export interface AIHistoryItem {
+  id: string;
+  url: string; // Data URL
+  prompt: string;
+  timestamp: number;
+}
+
+export interface ProcessingState {
+  isProcessing: boolean;
+  previewUrl: string | null;
+  originalWidth: number;
+  originalHeight: number;
+  processedWidth: number;
+  processedHeight: number;
+}
+
+export interface AIAnalysisResult {
+  title: string;
+  description: string;
+  mood: string;
+}
+
+export const LABELS = {
+  en: {
+    appTitle: "PIXEL//MONKEY",
+    subtitle: "SYSTEM READY",
+    pixelBlockSize: "DATA_BLOCK_SIZE",
+    pixelDesc: "Abstraction Level",
+    paletteSize: "COLOR_LIMIT",
+    paletteDesc: "Quantization Index",
+    contrast: "SIGNAL_GAIN",
+    contrastDesc: "Edge Separation",
+    smoothing: "NOISE_FILTER",
+    smoothingDesc: "Smoothing Algorithm",
+    dithering: "DITHER_MATRIX",
+    ditheringDesc: "Pattern Overlay",
+    grayscale: "MONOCHROME",
+    original: "INPUT",
+    pixelated: "OUTPUT",
+    analyze: "INITIATE SCAN",
+    analyzing: "PROCESSING...",
+    saveSmall: "EXPORT [RAW]",
+    saveScaled: "EXPORT [UPSCALED]",
+    dragDrop: "INSERT MEDIA",
+    uploadInfo: "OR INITIALIZE UPLOAD",
+    uploadTooltip: "LOAD IMAGE",
+    zoomOut: "ZOOM -",
+    zoomIn: "ZOOM +",
+    resetZoom: "1:1",
+    tools: "OPERATIONS",
+    brush: "PENCIL (B)",
+    erase: "ERASER (E)",
+    picker: "PICKER (ALT)",
+    pan: "PAN",
+    bucket: "FILL (G)",
+    aiTools: "AI_STUDIO",
+    aiPromptPlaceholder: "e.g., 'Remove background', 'Make it cyberpunk'...",
+    aiGenerate: "GENERATE",
+    outline: "AUTO_OUTLINE",
+    outlineColor: "STROKE_COLOR",
+    outlineThickness: "STROKE_WIDTH",
+    quickSize: "QUICK_RES",
+    adjustments: "FINE_TUNE",
+    brightness: "BRIGHTNESS",
+    saturation: "SATURATION",
+    hue: "HUE_SHIFT",
+    layers: "LAYERS",
+    addLayer: "NEW_LAYER",
+    timeline: "TIMELINE",
+    fps: "FPS",
+    onionSkin: "ONION_SKIN",
+    play: "PLAY",
+    pause: "PAUSE",
+    addFrame: "NEW_FRAME",
+    aiAnim: "AI_ANIMATE",
+    undo: "UNDO (Ctrl+Z)",
+    redo: "REDO (Ctrl+Y)",
+    colors: "PALETTE",
+    hex: "HEX"
+  },
+  zh: {
+    appTitle: "像素猴",
+    subtitle: "系统就绪",
+    pixelBlockSize: "数据块大小",
+    pixelDesc: "抽象等级",
+    paletteSize: "色彩限制",
+    paletteDesc: "量化指数",
+    contrast: "信号增益",
+    contrastDesc: "边缘分离度",
+    smoothing: "降噪滤波器",
+    smoothingDesc: "平滑算法",
+    dithering: "抖动矩阵",
+    ditheringDesc: "纹理覆盖",
+    grayscale: "单色模式",
+    original: "输入源",
+    pixelated: "输出源",
+    analyze: "启动扫描",
+    analyzing: "处理中...",
+    saveSmall: "导出 [原始]",
+    saveScaled: "导出 [高清]",
+    dragDrop: "插入媒体",
+    uploadInfo: "或初始化上传",
+    uploadTooltip: "读取图片",
+    zoomOut: "缩小",
+    zoomIn: "放大",
+    resetZoom: "重置",
+    tools: "工具箱",
+    brush: "铅笔 (B)",
+    erase: "橡皮 (E)",
+    picker: "吸管 (按住ALT)",
+    pan: "拖动",
+    bucket: "填充 (G)",
+    aiTools: "AI 实验室",
+    aiPromptPlaceholder: "例如: '移除背景', '添加赛博朋克滤镜'...",
+    aiGenerate: "生成",
+    outline: "自动描边",
+    outlineColor: "描边颜色",
+    outlineThickness: "描边宽度",
+    quickSize: "快速尺寸",
+    adjustments: "微调",
+    brightness: "亮度",
+    saturation: "饱和度",
+    hue: "色相",
+    layers: "图层",
+    addLayer: "新建图层",
+    timeline: "时间轴",
+    fps: "帧率",
+    onionSkin: "洋葱皮",
+    play: "播放",
+    pause: "暂停",
+    addFrame: "新建帧",
+    aiAnim: "AI 补帧",
+    undo: "撤销 (Ctrl+Z)",
+    redo: "重做 (Ctrl+Y)",
+    colors: "调色板",
+    hex: "HEX"
+  }
+};

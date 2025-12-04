@@ -1,11 +1,66 @@
-<div align="center">
+# Pixel Monkey // Retro Art Workstation
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+**Pixel Monkey** is a professional-grade browser-based tool designed to convert high-resolution images into authentic, crisp pixel art. Unlike standard downscaling tools that produce blurry edges, Pixel Monkey uses advanced quantization algorithms (Dominant Color Sampling & K-Means) to ensure razor-sharp, NES/SNES-style graphics.
 
-  <h1>Built with AI Studio</h2>
+It doubles as a full-featured pixel art editor with layer support, animation capabilities, and AI-powered tools powered by Google Gemini.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## 🌟 Key Features
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### 🎨 True Pixelation Engine
+*   **Crisp Edges**: Custom algorithm eliminates anti-aliasing artifacts found in standard image resizing.
+*   **Smart Palette**: Automatically extracts dominant colors and snaps pixels to a limited palette (e.g., 16 colors, 32 colors).
+*   **Dithering**: Optional Bayer Matrix dithering for retro shading effects.
+*   **Auto-Outline**: Algorithmic stroke generation for sprite boundaries.
 
-</div>
+### 🛠️ Professional Editing Tools
+*   **Tools**: Pencil (B), Eraser (E), Paint Bucket (G), Eyedropper (Alt), Pan.
+*   **Advanced Color Picker**: HSV-based selector with custom palette management.
+*   **Layer System**: Full support for multiple layers per frame with visibility and opacity toggles.
+
+### 🎬 Animation Studio
+*   **Timeline**: Frame-based animation workflow.
+*   **Onion Skinning**: See previous frames to guide animation.
+*   **Playback**: Adjustable FPS control.
+
+### 🤖 AI Integration (Google Gemini)
+*   **AI Analysis**: Generates retro RPG descriptions and mood analysis for your art.
+*   **AI Edit**: Use text prompts (e.g., "Make it cyberpunk", "Remove background") to transform sprites.
+*   **AI Inbetweening**: Generate the next frame of an animation using AI context awareness.
+
+## ⌨️ Keyboard Shortcuts
+
+| Key | Action |
+| :--- | :--- |
+| **B** | Select Pencil Tool |
+| **E** | Select Eraser Tool |
+| **G** | Select Paint Bucket Tool |
+| **Hold Alt** | Temporary Eyedropper (Release to switch back) |
+| **Ctrl + Z** | Undo |
+| **Ctrl + Y** | Redo |
+| **Space** | Pan (Drag canvas) |
+
+## 🚀 Technology Stack
+
+*   **Frontend**: React 19, TypeScript
+*   **Styling**: Tailwind CSS (Custom "Cassette Futurism" aesthetic)
+*   **AI**: Google GenAI SDK (`gemini-2.5-flash`, `gemini-2.5-flash-image`)
+*   **Icons**: Lucide React
+*   **Fonts**: 'Press Start 2P' & 'VT323' (Google Fonts)
+
+## 📦 Getting Started
+
+1.  **Clone the repository**.
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+3.  **Set up Environment**:
+    Ensure `process.env.API_KEY` is available with a valid Google Gemini API Key.
+4.  **Run the app**:
+    ```bash
+    npm start
+    ```
+
+---
+
+*System Status: ONLINE*
