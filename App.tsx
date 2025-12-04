@@ -1,20 +1,15 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PixelControls } from './components/PixelControls';
 import { Toolbox } from './components/Toolbox';
-import { Timeline } from './components/Timeline';
 import { Workstation } from './components/Workstation';
 import { 
   PixelSettings, 
   ProcessingState, 
-  AIAnalysisResult, 
   Language, 
   DrawingTool,
   ProjectState,
-  Frame,
-  Layer,
-  AIHistoryItem
+  Layer
 } from './types';
-import { analyzePixelArt, editPixelArt, generateAnimationFrame } from './services/geminiService';
 
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('zh'); 
@@ -30,7 +25,10 @@ const App: React.FC = () => {
     outlineColor: '#ffffff',
     hasOutline: false,
     outlineThickness: 1,
-    hsl: { brightness: 0, saturation: 0, hue: 0 }
+    hsl: { brightness: 0, saturation: 0, hue: 0 },
+    showGrid: false,
+    gridColor: '#333333',
+    gridOpacity: 0.5
   });
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pan');
@@ -44,29 +42,22 @@ const App: React.FC = () => {
     data: new Map()
   });
 
-  const createFrame = (): Frame => ({
-    id: crypto.randomUUID(),
-    layers: [createLayer('Layer 1')]
-  });
-
   const [project, setProject] = useState<ProjectState>({
-    frames: [createFrame()],
-    currentFrameIndex: 0,
     activeLayerId: '', 
-    fps: 8,
-    onionSkin: false,
-    isPlaying: false,
     savedColors: ['#ffb000', '#00cccc', '#ff4400', '#ffffff', '#000000']
   });
 
+  // Active layer state management
+  const [activeLayer, setActiveLayer] = useState<Layer>(createLayer('Layer 1'));
+
   useEffect(() => {
-    if (!project.activeLayerId && project.frames.length > 0) {
+    if (!project.activeLayerId) {
        setProject(prev => ({
            ...prev,
-           activeLayerId: prev.frames[0].layers[0].id
+           activeLayerId: activeLayer.id
        }));
     }
-  }, [project.frames]);
+  }, [project.activeLayerId, activeLayer.id]);
 
   const [history, setHistory] = useState<ProjectState[]>([]);
   const [future, setFuture] = useState<ProjectState[]>([]);
@@ -74,13 +65,7 @@ const App: React.FC = () => {
   const cloneProject = (proj: ProjectState): ProjectState => {
     return {
       ...proj,
-      frames: proj.frames.map(f => ({
-        ...f,
-        layers: f.layers.map(l => ({
-          ...l,
-          data: new Map(l.data)
-        }))
-      }))
+      savedColors: [...proj.savedColors] // Create a copy of the saved colors array
     };
   };
 
@@ -109,8 +94,6 @@ const App: React.FC = () => {
     setFuture(prev => prev.slice(1));
   }, [future, project]);
 
-  const [aiHistory, setAiHistory] = useState<AIHistoryItem[]>([]);
-
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isProcessing: false,
     previewUrl: null,
@@ -119,10 +102,6 @@ const App: React.FC = () => {
     processedWidth: 0,
     processedHeight: 0,
   });
-
-  const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isAiEditing, setIsAiEditing] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -191,68 +170,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!canvasRef.current) return;
-    setIsAnalyzing(true);
-    setAnalysisResult(null);
-    try {
-      const base64 = canvasRef.current.toDataURL('image/png');
-      const result = await analyzePixelArt(base64, language);
-      setAnalysisResult(result);
-    } catch (error) {
-      console.error("Analysis failed", error);
-      alert(language === 'zh' ? "分析失败，请检查 API Key" : "Failed to analyze image. Ensure API Key is set.");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleAiEdit = async (prompt: string) => {
-    if (!canvasRef.current) return;
-    setIsAiEditing(true);
-    try {
-        const base64 = canvasRef.current.toDataURL('image/png');
-        const newImageBase64 = await editPixelArt(base64, prompt);
-        
-        setAiHistory(prev => [{
-            id: crypto.randomUUID(),
-            url: newImageBase64,
-            prompt,
-            timestamp: Date.now()
-        }, ...prev]);
-
-        const event = new CustomEvent('UPDATE_SOURCE_IMAGE', { detail: newImageBase64 });
-        window.dispatchEvent(event);
-        
-    } catch (error) {
-        console.error("AI Edit failed", error);
-        alert(language === 'zh' ? "AI 生成失败" : "AI Generation failed.");
-    } finally {
-        setIsAiEditing(false);
-    }
-  };
-  
-  const handleAiAnimate = async (prompt: string) => {
-    if (!canvasRef.current) return;
-    setIsAiEditing(true);
-    try {
-        const base64 = canvasRef.current.toDataURL('image/png');
-        const newFrameBase64 = await generateAnimationFrame(base64, prompt);
-        
-        setAiHistory(prev => [{
-            id: crypto.randomUUID(),
-            url: newFrameBase64,
-            prompt: `[ANIM] ${prompt}`,
-            timestamp: Date.now()
-        }, ...prev]);
-        
-    } catch (error) {
-         console.error("AI Anim failed", error);
-    } finally {
-        setIsAiEditing(false);
-    }
-  }
-
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
           if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
@@ -282,13 +199,12 @@ const App: React.FC = () => {
          setProject={setProject}
       />
 
-      {/* CENTER: Canvas + Timeline */}
+      {/* CENTER: Canvas */}
       <div className="flex flex-col flex-1 min-w-0">
           <Workstation 
             settings={settings}
             setProcessingState={setProcessingState}
             onCanvasReady={handleCanvasReady}
-            analysisResult={analysisResult}
             language={language}
             activeTool={activeTool}
             setActiveTool={setActiveTool}
@@ -296,12 +212,9 @@ const App: React.FC = () => {
             setBrushColor={setBrushColor}
             project={project}
             setProject={setProject}
+            activeLayer={activeLayer}
+            setActiveLayer={setActiveLayer}
             pushToHistory={pushToHistory}
-          />
-          <Timeline 
-            project={project}
-            setProject={setProject}
-            language={language}
           />
       </div>
 
@@ -311,10 +224,6 @@ const App: React.FC = () => {
         setSettings={setSettings}
         processingState={processingState}
         onDownload={handleDownload}
-        onAnalyze={handleAnalyze}
-        onAiEdit={handleAiEdit}
-        isAnalyzing={isAnalyzing}
-        isAiEditing={isAiEditing}
         language={language}
         setLanguage={setLanguage}
         project={project}
@@ -322,8 +231,6 @@ const App: React.FC = () => {
         pushToHistory={pushToHistory}
         undo={handleUndo}
         redo={handleRedo}
-        aiHistory={aiHistory}
-        onAiAnimate={handleAiAnimate}
       />
     </div>
   );

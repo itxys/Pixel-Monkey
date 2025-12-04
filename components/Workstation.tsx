@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Frame } from '../types';
+import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Layer } from '../types';
 import { Upload, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
 interface WorkstationProps {
   settings: PixelSettings;
   setProcessingState: React.Dispatch<React.SetStateAction<ProcessingState>>;
   onCanvasReady: (canvas: HTMLCanvasElement) => void;
-  analysisResult: { title: string; description: string; mood: string } | null;
   language: Language;
   activeTool: DrawingTool;
   setActiveTool: (tool: DrawingTool) => void;
@@ -14,6 +13,8 @@ interface WorkstationProps {
   setBrushColor: (c: string) => void;
   project: ProjectState;
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
+  activeLayer: Layer;
+  setActiveLayer: React.Dispatch<React.SetStateAction<Layer>>;
   pushToHistory: () => void;
 }
 
@@ -46,7 +47,7 @@ const hexToRgb = (hex: string): number[] => {
 };
 const rgbToHex = (r: number, g: number, b: number) => {
   return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-}
+};
 
 const extractPalette = (pixels: number[][], k: number): number[][] => {
   if (pixels.length === 0) return [];
@@ -209,7 +210,6 @@ export const Workstation: React.FC<WorkstationProps> = ({
   settings, 
   setProcessingState,
   onCanvasReady,
-  analysisResult,
   language,
   activeTool,
   setActiveTool,
@@ -217,6 +217,8 @@ export const Workstation: React.FC<WorkstationProps> = ({
   setBrushColor,
   project,
   setProject,
+  activeLayer,
+  setActiveLayer,
   pushToHistory
 }) => {
   const t = LABELS[language];
@@ -228,20 +230,17 @@ export const Workstation: React.FC<WorkstationProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const previousToolRef = useRef<DrawingTool>('pan');
   const [generatedBaseData, setGeneratedBaseData] = useState<ImageData | null>(null);
-
-  // Animation Loop
-  useEffect(() => {
-    let interval: number;
-    if (project.isPlaying && project.frames.length > 1) {
-        interval = window.setInterval(() => {
-            setProject(p => {
-                const next = (p.currentFrameIndex + 1) % p.frames.length;
-                return { ...p, currentFrameIndex: next };
-            });
-        }, 1000 / project.fps);
-    }
-    return () => clearInterval(interval);
-  }, [project.isPlaying, project.fps, project.frames.length, setProject]);
+  
+  // Move tool state
+  const [isMoving, setIsMoving] = useState(false);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [moveOffset, setMoveOffset] = useState({ dx: 0, dy: 0 });
+  const initialLayerDataRef = useRef<Map<string, number[]> | null>(null);
+  
+  // Pan tool state
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStartPos, setPanStartPos] = useState({ x: 0, y: 0 });
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
   // Main Rendering Pipeline
   const renderFinalCanvas = useCallback(() => {
@@ -257,42 +256,16 @@ export const Workstation: React.FC<WorkstationProps> = ({
     // 1. Start with Generated Base (Background)
     const combinedData = new Uint8ClampedArray(generatedBaseData.data);
     
-    // 2. Render Onion Skin (if enabled)
-    if (project.onionSkin && !project.isPlaying && project.currentFrameIndex > 0) {
-        const prevFrame = project.frames[project.currentFrameIndex - 1];
-        prevFrame.layers.forEach(layer => {
-            if (layer.visible) {
-                layer.data.forEach((color, key) => {
-                    const [x, y] = key.split(',').map(Number);
-                    if (x >= 0 && x < w && y >= 0 && y < h) {
-                        const idx = (y * w + x) * 4;
-                        // Alpha blending for onion skin (30% opacity)
-                        const opacity = 0.3;
-                        combinedData[idx] = combinedData[idx] * (1-opacity) + color[0] * opacity;
-                        combinedData[idx+1] = combinedData[idx+1] * (1-opacity) + color[1] * opacity;
-                        combinedData[idx+2] = combinedData[idx+2] * (1-opacity) + color[2] * opacity;
-                        combinedData[idx+3] = 255;
-                    }
-                });
-            }
-        });
-    }
-
-    // 3. Render Active Frame Layers
-    const activeFrame = project.frames[project.currentFrameIndex];
-    if (activeFrame) {
-        activeFrame.layers.forEach(layer => {
-            if (layer.visible) {
-                layer.data.forEach((color, key) => {
-                    const [x, y] = key.split(',').map(Number);
-                    if (x >= 0 && x < w && y >= 0 && y < h) {
-                        const idx = (y * w + x) * 4;
-                        combinedData[idx] = color[0];
-                        combinedData[idx+1] = color[1];
-                        combinedData[idx+2] = color[2];
-                        combinedData[idx+3] = 255; // Full opacity for now
-                    }
-                });
+    // 2. Render Active Layer
+    if (activeLayer && activeLayer.visible) {
+        activeLayer.data.forEach((color, key) => {
+            const [x, y] = key.split(',').map(Number);
+            if (x >= 0 && x < w && y >= 0 && y < h) {
+                const idx = (y * w + x) * 4;
+                combinedData[idx] = color[0];
+                combinedData[idx+1] = color[1];
+                combinedData[idx+2] = color[2];
+                combinedData[idx+3] = 255; // Full opacity for now
             }
         });
     }
@@ -367,9 +340,38 @@ export const Workstation: React.FC<WorkstationProps> = ({
 
     const finalImageData = new ImageData(combinedData, w, h);
     ctx.putImageData(finalImageData, 0, 0);
+    
+    // 6. Draw Grid if enabled
+    if (settings.showGrid) {
+        ctx.save();
+        
+        // Set grid style - fine grid for 1px per cell
+        ctx.strokeStyle = settings.gridColor;
+        ctx.globalAlpha = settings.gridOpacity;
+        ctx.lineWidth = 0.5; // Fine line width for precise grid
+        
+        // Draw vertical grid lines at exact pixel boundaries
+        for (let x = 1; x < w; x++) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0); // Exact pixel boundary
+            ctx.lineTo(x, h);
+            ctx.stroke();
+        }
+        
+        // Draw horizontal grid lines at exact pixel boundaries
+        for (let y = 1; y < h; y++) {
+            ctx.beginPath();
+            ctx.moveTo(0, y); // Exact pixel boundary
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+    
     onCanvasReady(canvas);
 
-  }, [generatedBaseData, project, settings, onCanvasReady]);
+  }, [generatedBaseData, activeLayer, settings, onCanvasReady]);
 
   useEffect(() => {
     renderFinalCanvas();
@@ -615,23 +617,11 @@ export const Workstation: React.FC<WorkstationProps> = ({
     if (!coords) return;
     const { x, y } = coords;
     const key = `${x},${y}`;
-    const activeLayerId = project.activeLayerId;
-    const currentFrameIndex = project.currentFrameIndex;
 
     const updateLayer = (updateFn: (map: Map<string, number[]>) => void) => {
-        setProject(prev => {
-            const newFrames = [...prev.frames];
-            const layers = newFrames[currentFrameIndex].layers.map(l => {
-                if (l.id === activeLayerId) {
-                    const newData = new Map<string, number[]>(l.data);
-                    updateFn(newData);
-                    return { ...l, data: newData };
-                }
-                return l;
-            });
-            newFrames[currentFrameIndex] = { ...newFrames[currentFrameIndex], layers };
-            return { ...prev, frames: newFrames };
-        });
+        const newData = new Map<string, number[]>(activeLayer.data);
+        updateFn(newData);
+        setActiveLayer(prev => ({ ...prev, data: newData }));
     };
 
     if (activeTool === 'brush') {
@@ -651,14 +641,12 @@ export const Workstation: React.FC<WorkstationProps> = ({
         setIsDrawing(false); 
     } else if (activeTool === 'bucket') {
         const rgb = hexToRgb(brushColor);
-        const layer = project.frames[currentFrameIndex].layers.find(l => l.id === activeLayerId);
-        if (!layer) return;
 
         // BFS Flood Fill on the active layer
         // If we click on an empty pixel, fill connected empty pixels.
         // If we click on a colored pixel, fill connected pixels of that color.
         
-        const startColor = layer.data.get(key); // undefined if empty
+        const startColor = activeLayer.data.get(key); // undefined if empty
         
         // Safety: Limit flood fill to avoid infinite loops or massive lag in React state
         // Max pixels to fill
@@ -669,7 +657,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
         const visited = new Set<string>();
         visited.add(key);
 
-        const newMapData = new Map<string, number[]>(layer.data);
+        const newMapData = new Map<string, number[]>(activeLayer.data);
         const targetIsPresent = !!startColor;
 
         while (queue.length > 0 && filledCount < MAX_FILL) {
@@ -688,7 +676,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
                 const nKey = `${nx},${ny}`;
                 if (visited.has(nKey)) continue;
 
-                const nColor = layer.data.get(nKey);
+                const nColor = activeLayer.data.get(nKey);
                 const nIsPresent = !!nColor;
 
                 let shouldFill = false;
@@ -709,18 +697,109 @@ export const Workstation: React.FC<WorkstationProps> = ({
             }
         }
         
-        updateLayer(map => {
-            // merge newMapData into map? Or just use newMapData
-            // updateLayer expects a callback to mutate the map, but we calculated a new one effectively.
-            // Let's just manually re-set all changed keys.
-             newMapData.forEach((v, k) => map.set(k, v));
-        });
+        setActiveLayer(prev => ({ ...prev, data: newMapData }));
     }
+  };
+
+  // Move Tool Logic
+  const handleMoveStart = (e: React.PointerEvent) => {
+    if (activeTool !== 'move' || !generatedBaseData) return;
+    
+    const coords = getCanvasCoordinates(e);
+    if (!coords) return;
+    
+    e.preventDefault();
+    pushToHistory(); // Save state before moving
+    setIsMoving(true);
+    setStartPos(coords);
+    setMoveOffset({ dx: 0, dy: 0 });
+    
+    // Store initial layer data for reference during move
+    initialLayerDataRef.current = new Map(activeLayer.data);
+  };
+
+  const handleMove = (e: React.PointerEvent) => {
+    if (!isMoving || !generatedBaseData || !initialLayerDataRef.current) return;
+    
+    const coords = getCanvasCoordinates(e);
+    if (!coords) return;
+    
+    e.preventDefault();
+    
+    // Calculate offset from start position
+    const dx = coords.x - startPos.x;
+    const dy = coords.y - startPos.y;
+    setMoveOffset({ dx, dy });
+    
+    // Update layer data with offset
+    const newData = new Map<string, number[]>();
+    initialLayerDataRef.current.forEach((color, key) => {
+        const [x, y] = key.split(',').map(Number);
+        const newX = x + dx;
+        const newY = y + dy;
+        
+        // Only keep pixels within canvas bounds
+        if (newX >= 0 && newX < generatedBaseData.width && newY >= 0 && newY < generatedBaseData.height) {
+            newData.set(`${newX},${newY}`, color);
+        }
+    });
+    
+    setActiveLayer(prev => ({ ...prev, data: newData }));
+  };
+
+  const handleMoveEnd = () => {
+    setIsMoving(false);
+    initialLayerDataRef.current = null;
+  };
+
+  // Pan Tool Logic
+  const handlePanStart = (e: React.PointerEvent) => {
+    if (activeTool !== 'pan' || !containerRef.current) return;
+    
+    e.preventDefault();
+    setIsPanning(true);
+    setPanStartPos({ x: e.clientX, y: e.clientY });
+    // Store current scroll position
+    containerRef.current.style.scrollBehavior = 'auto';
+  };
+
+  const handlePan = (e: React.PointerEvent) => {
+    if (!isPanning || !containerRef.current) return;
+    
+    e.preventDefault();
+    
+    const dx = e.clientX - panStartPos.x;
+    const dy = e.clientY - panStartPos.y;
+    
+    // Scroll the container to pan the view
+    containerRef.current.scrollLeft -= dx;
+    containerRef.current.scrollTop -= dy;
+    
+    setPanStartPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handlePanEnd = () => {
+    if (containerRef.current) {
+      containerRef.current.style.scrollBehavior = 'smooth';
+    }
+    setIsPanning(false);
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!sourceImage) return;
-    if (activeTool === 'pan') return;
+    
+    // Handle pan tool separately
+    if (activeTool === 'pan') {
+        handlePanStart(e);
+        return;
+    }
+    
+    // Handle move tool separately
+    if (activeTool === 'move') {
+        handleMoveStart(e);
+        return;
+    }
+    
     e.preventDefault(); 
     pushToHistory(); // Save state before action
     setIsDrawing(true);
@@ -728,6 +807,18 @@ export const Workstation: React.FC<WorkstationProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    // Handle pan tool separately
+    if (activeTool === 'pan') {
+        handlePan(e);
+        return;
+    }
+    
+    // Handle move tool separately
+    if (activeTool === 'move') {
+        handleMove(e);
+        return;
+    }
+    
     if (isDrawing && activeTool !== 'pan' && activeTool !== 'eyedropper') {
         e.preventDefault();
         performToolAction(e);
@@ -735,6 +826,16 @@ export const Workstation: React.FC<WorkstationProps> = ({
   };
 
   const handlePointerUp = () => {
+    // Handle pan tool end
+    if (isPanning) {
+        handlePanEnd();
+    }
+    
+    // Handle move tool end
+    if (isMoving) {
+        handleMoveEnd();
+    }
+    
     setIsDrawing(false);
   };
 
@@ -747,6 +848,12 @@ export const Workstation: React.FC<WorkstationProps> = ({
             if (activeTool !== 'eyedropper') {
                 previousToolRef.current = activeTool;
                 setActiveTool('eyedropper');
+            }
+        } else if (e.key === ' ') {
+            e.preventDefault();
+            if (activeTool !== 'pan') {
+                previousToolRef.current = activeTool;
+                setActiveTool('pan');
             }
         } else if (key === 'b') {
             setActiveTool('brush');
@@ -761,6 +868,10 @@ export const Workstation: React.FC<WorkstationProps> = ({
             if (activeTool === 'eyedropper') {
                 setActiveTool(previousToolRef.current);
             }
+        } else if (e.key === ' ') {
+            if (activeTool === 'pan') {
+                setActiveTool(previousToolRef.current);
+            }
         }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -770,6 +881,28 @@ export const Workstation: React.FC<WorkstationProps> = ({
         window.removeEventListener('keyup', handleKeyUp);
     };
   }, [activeTool, setActiveTool]);
+
+  // Mouse Wheel Zoom
+  useEffect(() => {
+    const handleWheelZoom = (e: WheelEvent) => {
+        e.preventDefault();
+        const zoomFactor = 1.1; // Zoom multiplier
+        const delta = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
+        const newZoom = Math.max(0.5, Math.min(16, zoom * delta));
+        setZoom(newZoom);
+    };
+
+    const container = containerRef.current;
+    if (container) {
+        container.addEventListener('wheel', handleWheelZoom, { passive: false });
+    }
+
+    return () => {
+        if (container) {
+            container.removeEventListener('wheel', handleWheelZoom);
+        }
+    };
+  }, [zoom, setZoom]);
 
 
   return (
@@ -796,7 +929,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
                 step="0.5" 
                 value={zoom}
                 onChange={(e) => setZoom(parseFloat(e.target.value))}
-                className="w-24 h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rotate-[22.5deg]"
+                className="w-24 h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rotate-[0deg]"
             />
             <ZoomIn className="w-4 h-4 text-[#00cccc]" />
         </div>
@@ -819,33 +952,15 @@ export const Workstation: React.FC<WorkstationProps> = ({
         />
       </div>
 
-      {/* AI Analysis Overlay */}
-      {analysisResult && (
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-30 w-11/12 max-w-xl animate-fade-in-up pointer-events-none">
-            <div className="bg-[#0a0a0a]/90 backdrop-blur-md border-l-4 border-[#ffb000] p-4 shadow-[0_0_20px_rgba(255,176,0,0.2)] cassette-border relative overflow-hidden pointer-events-auto">
-                <div className="flex justify-between items-start mb-2 border-b border-[#333] pb-1">
-                    <h3 className="text-lg font-retro-title tracking-widest text-[#ffb000] uppercase">
-                        {analysisResult.title}
-                    </h3>
-                    <span className="text-[10px] uppercase bg-[#333] text-[#00cccc] px-2 py-1 font-mono border border-[#00cccc]/50">
-                        {analysisResult.mood}
-                    </span>
-                </div>
-                <p className="text-[#00cccc] text-sm leading-tight font-mono uppercase">
-                    {">>"} {analysisResult.description}
-                </p>
-            </div>
-        </div>
-      )}
-
       {/* Canvas Container */}
       <div 
         ref={containerRef}
-        className={`flex-1 flex items-center justify-center overflow-auto p-0 ${activeTool === 'pan' ? 'cursor-grab active:cursor-grabbing' : activeTool === 'eyedropper' ? 'cursor-crosshair' : activeTool === 'bucket' ? 'cursor-copy' : 'cursor-cell'}`}
+        className={`flex-1 flex items-center justify-center overflow-auto p-0 ${activeTool === 'pan' ? 'cursor-grab active:cursor-grabbing' : activeTool === 'eyedropper' ? 'cursor-crosshair' : activeTool === 'bucket' ? 'cursor-copy' : ''}`}
         style={{ 
-            backgroundImage: 'radial-gradient(#1a1a1a 2px, transparent 2px)', 
-            backgroundSize: '32px 32px',
-            backgroundColor: '#050505'
+            backgroundColor: '#050505',
+            // Create custom cursor with size relative to canvas zoom, similar to Aseprite
+            cursor: activeTool === 'brush' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${Math.min(zoom * 2, 16)}' height='${Math.min(zoom * 2, 16)}' viewBox='0 0 ${Math.min(zoom * 2, 16)} ${Math.min(zoom * 2, 16)}'%3E%3Crect width='${zoom}' height='${zoom}' fill='${brushColor.replace('#', '%23')}' x='${Math.min(zoom * 2, 16) / 2 - zoom / 2}' y='${Math.min(zoom * 2, 16) / 2 - zoom / 2}'/%3E%3C/svg%3E") ${Math.min(zoom * 2, 16) / 2} ${Math.min(zoom * 2, 16) / 2}, auto` : 
+                     activeTool === 'eraser' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${Math.min(zoom * 2, 16)}' height='${Math.min(zoom * 2, 16)}' viewBox='0 0 ${Math.min(zoom * 2, 16)} ${Math.min(zoom * 2, 16)}'%3E%3Crect width='${zoom}' height='${zoom}' fill='white' x='${Math.min(zoom * 2, 16) / 2 - zoom / 2}' y='${Math.min(zoom * 2, 16) / 2 - zoom / 2}'/%3E%3C/svg%3E") ${Math.min(zoom * 2, 16) / 2} ${Math.min(zoom * 2, 16) / 2}, auto` : 'auto'
         }}
       >
         {!sourceImage ? (
@@ -863,13 +978,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
                 transformOrigin: 'center',
                 transition: isDrawing ? 'none' : 'transform 0.1s ease-out'
             }}
-            className="shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-[#222] bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAuSURBVHgB7YwxDQAwDMSg96/0M2LAwY0qK6kC8yW5J2c/B2x2wWIX/JGw2QWdfwL5E5+iS8OAAAAAAElFTkSuQmCC')]"
+            className="shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-[#222] bg-black"
           >
             <canvas 
                 ref={canvasRef} 
                 className="pixelated-canvas block touch-none"
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
             />
           </div>
         )}

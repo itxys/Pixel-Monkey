@@ -22,6 +22,9 @@ export interface PixelSettings {
   hasOutline: boolean; 
   outlineThickness: number;
   hsl: HSLAdjustment;
+  showGrid: boolean; 
+  gridColor: string;
+  gridOpacity: number;
 }
 
 export interface Layer {
@@ -32,18 +35,8 @@ export interface Layer {
   data: Map<string, number[]>; // x,y -> [r,g,b]
 }
 
-export interface Frame {
-  id: string;
-  layers: Layer[];
-}
-
 export interface ProjectState {
-  frames: Frame[];
-  currentFrameIndex: number;
   activeLayerId: string;
-  fps: number;
-  onionSkin: boolean;
-  isPlaying: boolean;
   savedColors: string[]; // List of hex codes
 }
 
