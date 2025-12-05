@@ -66,22 +66,63 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
         <div className="space-y-3">
              <div className="text-[20px] text-[#ffb000] font-bold tracking-widest border-b border-[#ffb000]/30 pb-1">RENDER SETTINGS</div>
              
-             <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-3">
                  <div>
                     <label className="text-[18px] text-gray-500 block">{t.pixelBlockSize}</label>
-                    <input type="range" min="1" max="32" value={settings.pixelSize} onChange={(e) => handleSettingChange('pixelSize', parseInt(e.target.value))} className="accent-[#00cccc] h-2" />
+                    <div className="flex items-center gap-2 mt-1">
+                        <input type="range" min="1" max="32" value={settings.pixelSize} onChange={(e) => handleSettingChange('pixelSize', parseInt(e.target.value))} className="accent-[#00cccc] h-2 flex-1" />
+                        <input 
+                            type="number" 
+                            min="1" 
+                            max="32" 
+                            value={settings.pixelSize}
+                            onChange={(e) => handleSettingChange('pixelSize', parseInt(e.target.value))}
+                            className="text-[16px] font-mono text-[#00cccc] w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                        />
+                    </div>
                  </div>
                  <div>
                     <label className="text-[18px] text-gray-500 block">{t.paletteSize}</label>
-                    <input type="range" min="2" max="64" value={settings.paletteSize} onChange={(e) => handleSettingChange('paletteSize', parseInt(e.target.value))} className="accent-[#ffb000] h-2" />
+                    <div className="flex items-center gap-2 mt-1">
+                        <input type="range" min="2" max="64" value={settings.paletteSize} onChange={(e) => handleSettingChange('paletteSize', parseInt(e.target.value))} className="accent-[#ffb000] h-2 flex-1" />
+                        <input 
+                            type="number" 
+                            min="2" 
+                            max="64" 
+                            value={settings.paletteSize}
+                            onChange={(e) => handleSettingChange('paletteSize', parseInt(e.target.value))}
+                            className="text-[16px] font-mono text-[#ffb000] w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                        />
+                    </div>
                  </div>
                  <div>
                     <label className="text-[18px] text-gray-500 block">{t.smoothing}</label>
-                    <input type="range" min="0" max="2" value={settings.smoothing} onChange={(e) => handleSettingChange('smoothing', parseInt(e.target.value))} className="accent-[#00cccc] h-2" />
+                    <div className="flex items-center gap-2 mt-1">
+                        <input type="range" min="0" max="2" value={settings.smoothing} onChange={(e) => handleSettingChange('smoothing', parseInt(e.target.value))} className="accent-[#00cccc] h-2 flex-1" />
+                        <input 
+                            type="number" 
+                            min="0" 
+                            max="2" 
+                            value={settings.smoothing}
+                            onChange={(e) => handleSettingChange('smoothing', parseInt(e.target.value))}
+                            className="text-[16px] font-mono text-[#00cccc] w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                        />
+                    </div>
                  </div>
                  <div>
                     <label className="text-[18px] text-gray-500 block">{t.dithering}</label>
-                    <input type="range" min="0" max="1" step="0.1" value={settings.dithering} onChange={(e) => handleSettingChange('dithering', parseFloat(e.target.value))} className="accent-[#ffb000] h-2" />
+                    <div className="flex items-center gap-2 mt-1">
+                        <input type="range" min="0" max="1" step="0.1" value={settings.dithering} onChange={(e) => handleSettingChange('dithering', parseFloat(e.target.value))} className="accent-[#ffb000] h-2 flex-1" />
+                        <input 
+                            type="number" 
+                            min="0" 
+                            max="1" 
+                            step="0.1"
+                            value={settings.dithering}
+                            onChange={(e) => handleSettingChange('dithering', parseFloat(e.target.value))}
+                            className="text-[16px] font-mono text-[#ffb000] w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                        />
+                    </div>
                  </div>
              </div>
               
@@ -90,14 +131,39 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
                  <div className="flex items-center gap-3">
                     <span className="text-[18px] text-gray-600 w-6">Bri</span>
                     <input type="range" min="-100" max="100" value={settings.hsl.brightness} onChange={(e) => handleHSLChange('brightness', parseInt(e.target.value))} className="h-2 bg-[#333] accent-white flex-1" />
+                    <input 
+                        type="number" 
+                        min="-100" 
+                        max="100" 
+                        value={settings.hsl.brightness}
+                        onChange={(e) => handleHSLChange('brightness', parseInt(e.target.value))}
+                        className="text-[16px] font-mono text-white w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                    />
                  </div>
                  <div className="flex items-center gap-3">
                     <span className="text-[18px] text-gray-600 w-6">Sat</span>
                     <input type="range" min="-100" max="100" value={settings.hsl.saturation} onChange={(e) => handleHSLChange('saturation', parseInt(e.target.value))} className="h-2 bg-[#333] accent-white flex-1" />
+                    <input 
+                        type="number" 
+                        min="-100" 
+                        max="100" 
+                        value={settings.hsl.saturation}
+                        onChange={(e) => handleHSLChange('saturation', parseInt(e.target.value))}
+                        className="text-[16px] font-mono text-white w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                    />
                  </div>
                  <div className="flex items-center gap-3">
                     <span className="text-[18px] text-gray-600 w-6">Dith</span>
                     <input type="range" min="0" max="1" step="0.1" value={settings.dithering} onChange={(e) => handleSettingChange('dithering', parseFloat(e.target.value))} className="h-2 bg-[#333] accent-[#ffb000] flex-1" />
+                    <input 
+                        type="number" 
+                        min="0" 
+                        max="1" 
+                        step="0.1"
+                        value={settings.dithering}
+                        onChange={(e) => handleSettingChange('dithering', parseFloat(e.target.value))}
+                        className="text-[16px] font-mono text-[#ffb000] w-12 text-right bg-[#111] border border-[#333] px-1 text-center"
+                    />
                  </div>
              </div>
 
@@ -108,15 +174,27 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
                 <input type="checkbox" checked={settings.hasOutline} onChange={(e) => handleSettingChange('hasOutline', e.target.checked)} className="accent-[#ff4400] w-5 h-5" />
              </div>
              {settings.hasOutline && (
-                <div className="flex gap-3">
-                    <input 
-                        type="range" 
-                        min="1" max="8" 
-                        value={settings.outlineThickness} 
-                        onChange={(e) => handleSettingChange('outlineThickness', parseInt(e.target.value))} 
-                        className="accent-[#ff4400] flex-1 h-2" 
-                    />
-                    <input type="color" value={settings.outlineColor} onChange={(e) => handleSettingChange('outlineColor', e.target.value)} className="w-6 h-6 bg-transparent" />
+                <div className="space-y-2">
+                    <div className="flex gap-3 items-center">
+                        <input 
+                            type="range" 
+                            min="1" max="8" 
+                            value={settings.outlineThickness} 
+                            onChange={(e) => handleSettingChange('outlineThickness', parseInt(e.target.value))} 
+                            className="accent-[#ff4400] w-full h-2" 
+                        />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <input 
+                            type="number" 
+                            min="1" 
+                            max="8" 
+                            value={settings.outlineThickness}
+                            onChange={(e) => handleSettingChange('outlineThickness', parseInt(e.target.value))}
+                            className="text-[16px] font-mono text-[#ff4400] w-8 bg-[#111] border border-[#333] px-1 text-center"
+                        />
+                        <input type="color" value={settings.outlineColor} onChange={(e) => handleSettingChange('outlineColor', e.target.value)} className="w-6 h-6 bg-transparent" />
+                    </div>
                 </div>
              )}
               
@@ -129,15 +207,30 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
              </div>
              {settings.showGrid && (
                 <div className="space-y-3">
-                    <div className="flex gap-3">
+                    <div className="flex items-center gap-3">
                         <input type="color" value={settings.gridColor} onChange={(e) => handleSettingChange('gridColor', e.target.value)} className="w-8 h-8 bg-transparent" />
-                        <input 
-                            type="range" 
-                            min="0" max="1" step="0.1" 
-                            value={settings.gridOpacity} 
-                            onChange={(e) => handleSettingChange('gridOpacity', parseFloat(e.target.value))} 
-                            className="accent-[#00cccc] flex-1 h-2" 
-                        />
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex gap-3 items-center">
+                            <input 
+                                type="range" 
+                                min="0" max="1" step="0.1" 
+                                value={settings.gridOpacity} 
+                                onChange={(e) => handleSettingChange('gridOpacity', parseFloat(e.target.value))} 
+                                className="accent-[#00cccc] w-full h-2" 
+                            />
+                        </div>
+                        <div className="flex items-center justify-end">
+                            <input 
+                                type="number" 
+                                min="0" 
+                                max="1" 
+                                step="0.1"
+                                value={settings.gridOpacity}
+                                onChange={(e) => handleSettingChange('gridOpacity', parseFloat(e.target.value))}
+                                className="text-[16px] font-mono text-[#00cccc] w-8 bg-[#111] border border-[#333] px-1 text-center"
+                            />
+                        </div>
                     </div>
                 </div>
              )}

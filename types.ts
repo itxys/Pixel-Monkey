@@ -32,12 +32,33 @@ export interface Layer {
   name: string;
   visible: boolean;
   opacity: number;
-  data: Map<string, number[]>; // x,y -> [r,g,b]
+  data: Uint8ClampedArray; // TypedArray for pixel data [r,g,b,a,r,g,b,a,...]
+  width: number; // Layer width in pixels
+  height: number; // Layer height in pixels
 }
 
 export interface ProjectState {
   activeLayerId: string;
   savedColors: string[]; // List of hex codes
+}
+
+// History delta for optimized undo/redo
+export interface HistoryDelta {
+  type: 'pixel' | 'layer' | 'project';
+  layerId: string;
+  changes?: Array<{
+    x: number;
+    y: number;
+    oldColor: [number, number, number, number];
+    newColor: [number, number, number, number];
+  }>;
+  timestamp: number;
+}
+
+// History entry containing the delta
+export interface HistoryEntry {
+  delta: HistoryDelta;
+  timestamp: number;
 }
 
 export interface AIHistoryItem {
@@ -118,7 +139,11 @@ export const LABELS = {
     undo: "UNDO (Ctrl+Z)",
     redo: "REDO (Ctrl+Y)",
     colors: "PALETTE",
-    hex: "HEX"
+    hex: "HEX",
+    symmetry: "SYMMETRY",
+    enabled: "ENABLED",
+    vertical: "VERTICAL",
+    horizontal: "HORIZONTAL"
   },
   zh: {
     appTitle: "像素猴",
@@ -175,6 +200,10 @@ export const LABELS = {
     undo: "撤销 (Ctrl+Z)",
     redo: "重做 (Ctrl+Y)",
     colors: "调色板",
-    hex: "HEX"
+    hex: "HEX",
+    symmetry: "对称绘制",
+    enabled: "启用",
+    vertical: "纵向",
+    horizontal: "横向"
   }
 };

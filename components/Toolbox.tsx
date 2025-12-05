@@ -12,6 +12,13 @@ interface ToolboxProps {
   language: Language;
   project: ProjectState;
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
+  recentColors: string[];
+  updateRecentColors: (color: string) => void;
+  // Symmetry drawing props
+  symmetryEnabled: boolean;
+  setSymmetryEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  symmetryType: 'vertical' | 'horizontal';
+  setSymmetryType: React.Dispatch<React.SetStateAction<'vertical' | 'horizontal'>>;
 }
 
 // Helper: Hex <-> HSV/RGB
@@ -67,7 +74,13 @@ export const Toolbox: React.FC<ToolboxProps> = ({
   setBrushSize,
   language,
   project,
-  setProject
+  setProject,
+  recentColors,
+  updateRecentColors,
+  symmetryEnabled,
+  setSymmetryEnabled,
+  symmetryType,
+  setSymmetryType
 }) => {
   const t = LABELS[language];
   
@@ -166,6 +179,27 @@ export const Toolbox: React.FC<ToolboxProps> = ({
     </button>
   );
 
+  // Classic pixel art palettes
+  const classicPalettes = {
+    nes: [
+      '#000000', '#ffffff', '#880000', '#aaffee', '#cc44cc', '#00cc55', '#0000aa', '#eeee77',
+      '#dd8855', '#664400', '#ff7777', '#333333', '#777777', '#aaff66', '#0088ff', '#bbbbbb'
+    ],
+    snes: [
+      '#000000', '#555555', '#aaaaaa', '#ffffff', '#940034', '#ff0044', '#ff6536', '#ffaa34',
+      '#ffe634', '#aaff66', '#35ff34', '#0088ff', '#cc22cc', '#8520c8', '#4433cc', '#4444cc'
+    ],
+    gameboy: [
+      '#0f380f', '#306230', '#8bac0f', '#9bbc0f'
+    ],
+    pico8: [
+      '#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8',
+      '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'
+    ]
+  };
+  
+  const [selectedPalette, setSelectedPalette] = useState<string | null>(null);
+  
   const pureHueRgb = hsvToRgb(hsv.h, 1, 1);
   const pureHueHex = rgbToHex(pureHueRgb.r, pureHueRgb.g, pureHueRgb.b);
 
@@ -184,11 +218,71 @@ export const Toolbox: React.FC<ToolboxProps> = ({
               <ToolButton tool="move" icon={Move} label="MOVE" colorClass="#00cccc" />
            </div>
         </div>
+        
+        {/* Symmetry Drawing Section */}
+        <div className="p-3 bg-[#111] border-b border-[#333]">
+           <div className="text-[#00cccc] text-[10px] font-bold tracking-widest mb-2 border-l-2 border-[#00cccc] pl-2">{t.symmetry}</div>
+           <div className="space-y-2">
+              {/* Symmetry Toggle */}
+              <div className="flex items-center justify-between">
+                 <span className="text-xs font-mono">{t.enabled}</span>
+                 <button 
+                    className={`w-10 h-5 rounded-full ${symmetryEnabled ? 'bg-[#00cccc]' : 'bg-[#333]'} transition-colors`}
+                    onClick={() => setSymmetryEnabled(!symmetryEnabled)}
+                 >
+                    <div 
+                       className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${symmetryEnabled ? 'translate-x-5' : 'translate-x-0.5'}`}
+                    ></div>
+                 </button>
+              </div>
+              
+              {/* Symmetry Type */}
+              {symmetryEnabled && (
+                 <div className="flex gap-1">
+                    <button 
+                       className={`flex-1 p-1 rounded border transition-colors ${symmetryType === 'vertical' ? 'border-[#00cccc] bg-[#00cccc]/20 text-[#00cccc]' : 'border-[#333] bg-[#222] text-gray-500 hover:border-gray-400'}`}
+                       onClick={() => setSymmetryType('vertical')}
+                       title={t.vertical}
+                    >
+                       <div className="flex items-center justify-center">
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-2a6 6 0 100-12 6 6 0 000 12zm0-4a2 2 0 110-4 2 2 0 010 4z" />
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v20" />
+                         </svg>
+                       </div>
+                    </button>
+                    <button 
+                       className={`flex-1 p-1 rounded border transition-colors ${symmetryType === 'horizontal' ? 'border-[#00cccc] bg-[#00cccc]/20 text-[#00cccc]' : 'border-[#333] bg-[#222] text-gray-500 hover:border-gray-400'}`}
+                       onClick={() => setSymmetryType('horizontal')}
+                       title={t.horizontal}
+                    >
+                       <div className="flex items-center justify-center">
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-2a6 6 0 100-12 6 6 0 000 12zm-4-6a2 2 0 114 0 2 2 0 01-4 0zm4 0a2 2 0 104 0 2 2 0 00-4 0z" />
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 12h20" />
+                         </svg>
+                       </div>
+                    </button>
+                 </div>
+              )}
+           </div>
+        </div>
 
         {/* Brush Size */}
         <div className="p-3 bg-[#111] border-b border-[#333]">
            <div className="text-[#00cccc] text-[10px] font-bold tracking-widest mb-2 border-l-2 border-[#00cccc] pl-2">BRUSH SIZE</div>
-           <div className="flex items-center gap-2">
+           <div className="mb-2">
+              <input 
+                 type="range" 
+                 min="1" 
+                 max="10" 
+                 step="1" 
+                 value={brushSize}
+                 onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                 className="w-full h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rounded-none"
+              />
+           </div>
+           <div className="flex items-center justify-between">
               <button 
                  onClick={() => setBrushSize(prev => Math.max(1, prev - 1))}
                  className="p-1 bg-[#222] border border-[#333] text-[#00cccc] hover:bg-[#333] w-6 h-6 flex items-center justify-center"
@@ -197,13 +291,24 @@ export const Toolbox: React.FC<ToolboxProps> = ({
                  -
               </button>
               <input 
-                 type="range" 
+                 type="number" 
                  min="1" 
                  max="10" 
-                 step="1" 
                  value={brushSize}
-                 onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                 className="flex-1 h-1 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#00cccc] [&::-webkit-slider-thumb]:rounded-none"
+                 onChange={(e) => {
+                     const value = parseInt(e.target.value);
+                     if (!isNaN(value)) {
+                         setBrushSize(Math.min(10, Math.max(1, value)));
+                     }
+                 }}
+                 onBlur={(e) => {
+                     const value = parseInt(e.target.value);
+                     if (isNaN(value) || value < 1 || value > 10) {
+                         // Reset to valid value if input is invalid
+                         e.currentTarget.value = brushSize.toString();
+                     }
+                 }}
+                 className="w-12 text-[16px] font-mono text-[#00cccc] bg-[#111] border border-[#333] text-center px-1"
               />
               <button 
                  onClick={() => setBrushSize(prev => Math.min(10, prev + 1))}
@@ -213,16 +318,75 @@ export const Toolbox: React.FC<ToolboxProps> = ({
                  +
               </button>
            </div>
-           <div className="text-center text-xs text-[#00cccc] mt-1">
-              {brushSize}px
-           </div>
         </div>
+
+        {/* Recent Colors */}
+        {recentColors.length > 0 && (
+          <div className="p-3 bg-[#111] border-b border-[#333]">
+             <div className="text-[#00cccc] text-[10px] font-bold tracking-widest mb-2 border-l-2 border-[#00cccc] pl-2">RECENT COLORS</div>
+             <div className="grid grid-cols-8 gap-1">
+                 {recentColors.map((color, idx) => (
+                     <div 
+                        key={`${color}-${idx}`} 
+                        className="aspect-square border border-[#333] cursor-pointer relative group"
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          setBrushColor(color);
+                          updateRecentColors(color);
+                        }}
+                     >
+                        {brushColor === color && (
+                          <div className="absolute inset-0 border-2 border-white shadow-[0_0_5px_rgba(255,255,255,0.5)] pointer-events-none"></div>
+                        )}
+                     </div>
+                 ))}
+             </div>
+          </div>
+        )}
 
         {/* Advanced Color Picker */}
         <div className="p-3 flex-1 flex flex-col gap-3">
              <div className="text-[#d946ef] text-[10px] font-bold tracking-widest border-l-2 border-[#d946ef] pl-2 flex justify-between items-center">
                  <span>COLOR</span>
                  <span className="font-mono text-gray-500">{brushColor.toUpperCase()}</span>
+             </div>
+             
+             {/* Classic Palettes */}
+             <div className="mt-2">
+                 <div className="flex justify-between items-center mb-2">
+                    <span className="text-[9px] text-[#00cccc] tracking-widest">CLASSIC PALETTES</span>
+                    <select 
+                        value={selectedPalette || ''}
+                        onChange={(e) => setSelectedPalette(e.target.value || null)}
+                        className="bg-[#222] border border-[#333] text-[9px] text-[#00cccc] px-2 py-1"
+                    >
+                        <option value="">None</option>
+                        <option value="nes">NES</option>
+                        <option value="snes">SNES</option>
+                        <option value="gameboy">Game Boy</option>
+                        <option value="pico8">PICO-8</option>
+                    </select>
+                 </div>
+                 
+                 {selectedPalette && classicPalettes[selectedPalette as keyof typeof classicPalettes] && (
+                     <div className="grid grid-cols-8 gap-1">
+                         {classicPalettes[selectedPalette as keyof typeof classicPalettes].map((color, idx) => (
+                             <div 
+                                key={`${selectedPalette}-${color}-${idx}`} 
+                                className="aspect-square border border-[#333] cursor-pointer relative group"
+                                style={{ backgroundColor: color }}
+                                onClick={() => {
+                                  setBrushColor(color);
+                                  updateRecentColors(color);
+                                }}
+                             >
+                                {brushColor === color && (
+                                  <div className="absolute inset-0 border-2 border-white shadow-[0_0_5px_rgba(255,255,255,0.5)] pointer-events-none"></div>
+                                )}
+                             </div>
+                         ))}
+                     </div>
+                 )}
              </div>
 
              {/* Saturation/Value Box */}

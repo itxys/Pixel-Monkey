@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Layer } from '../types';
+import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Layer, HistoryDelta } from '../types';
 import { Upload, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
 interface WorkstationProps {
@@ -18,6 +18,9 @@ interface WorkstationProps {
   activeLayer: Layer;
   setActiveLayer: React.Dispatch<React.SetStateAction<Layer>>;
   pushToHistory: () => void;
+  // Symmetry drawing props
+  symmetryEnabled: boolean;
+  symmetryType: 'vertical' | 'horizontal';
 }
 
 // ---- Optimized Core Algorithm ----
@@ -223,7 +226,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
   setProject,
   activeLayer,
   setActiveLayer,
-  pushToHistory
+  pushToHistory,
+  symmetryEnabled,
+  symmetryType
 }) => {
   const t = LABELS[language];
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
@@ -245,8 +250,62 @@ export const Workstation: React.FC<WorkstationProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStartPos, setPanStartPos] = useState({ x: 0, y: 0 });
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  
+  
 
-  // Main Rendering Pipeline
+  // Canvas Rendering Optimization
+  const isRenderingRef = useRef(false);
+  const renderTimeoutRef = useRef<NodeJS.Timeout>();
+  
+  // Dirty Rect for Partial Redraw
+  const dirtyRectRef = useRef<{x: number, y: number, width: number, height: number} | null>(null);
+  
+  // Update Dirty Rect with Brush Area
+  const updateDirtyRect = useCallback((x: number, y: number, width: number, height: number) => {
+    const canvasWidth = generatedBaseData?.width || 0;
+    const canvasHeight = generatedBaseData?.height || 0;
+    
+    // Ensure coordinates are within bounds
+    const newX = Math.max(0, x);
+    const newY = Math.max(0, y);
+    const newWidth = Math.min(width, canvasWidth - newX);
+    const newHeight = Math.min(height, canvasHeight - newY);
+    
+    if (newWidth <= 0 || newHeight <= 0) {
+      return;
+    }
+    
+    if (dirtyRectRef.current) {
+      // Merge with existing dirty rect
+      const current = dirtyRectRef.current;
+      const mergedX = Math.min(current.x, newX);
+      const mergedY = Math.min(current.y, newY);
+      const mergedWidth = Math.max(current.x + current.width, newX + newWidth) - mergedX;
+      const mergedHeight = Math.max(current.y + current.height, newY + newHeight) - mergedY;
+      
+      dirtyRectRef.current = {
+        x: mergedX,
+        y: mergedY,
+        width: mergedWidth,
+        height: mergedHeight
+      };
+    } else {
+      // Set initial dirty rect
+      dirtyRectRef.current = {
+        x: newX,
+        y: newY,
+        width: newWidth,
+        height: newHeight
+      };
+    }
+  }, [generatedBaseData]);
+  
+  // Reset Dirty Rect
+  const resetDirtyRect = useCallback(() => {
+    dirtyRectRef.current = null;
+  }, []);
+
+  // Main Rendering Pipeline - Direct Render
   const renderFinalCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !generatedBaseData) return;
@@ -256,25 +315,51 @@ export const Workstation: React.FC<WorkstationProps> = ({
     
     const w = canvas.width;
     const h = canvas.height;
-
-    // 1. Start with Generated Base (Background)
+    
+    // Determine render region
+    const renderRegion = dirtyRectRef.current || { x: 0, y: 0, width: w, height: h };
+    
+    // 1. Start with Generated Base (Background) for the render region
     const combinedData = new Uint8ClampedArray(generatedBaseData.data);
     
     // 2. Render Active Layer
     if (activeLayer && activeLayer.visible) {
-        activeLayer.data.forEach((color, key) => {
-            const [x, y] = key.split(',').map(Number);
-            if (x >= 0 && x < w && y >= 0 && y < h) {
-                const idx = (y * w + x) * 4;
-                combinedData[idx] = color[0];
-                combinedData[idx+1] = color[1];
-                combinedData[idx+2] = color[2];
-                combinedData[idx+3] = 255; // Full opacity for now
+        const layerWidth = activeLayer.width;
+        const layerHeight = activeLayer.height;
+        const layerData = activeLayer.data;
+        
+        // Iterate through the layer data and render pixels within the render region
+        for (let y = 0; y < layerHeight; y++) {
+            // Check if this row is within the render region (with buffer)
+            if (y < renderRegion.y - 2 || y > renderRegion.y + renderRegion.height + 2) {
+                continue;
             }
-        });
+            
+            for (let x = 0; x < layerWidth; x++) {
+                // Check if this column is within the render region (with buffer)
+                if (x < renderRegion.x - 2 || x > renderRegion.x + renderRegion.width + 2) {
+                    continue;
+                }
+                
+                // Check if pixel is within canvas bounds
+                if (x >= 0 && x < w && y >= 0 && y < h) {
+                    const layerIdx = (y * layerWidth + x) * 4;
+                    const alpha = layerData[layerIdx + 3];
+                    
+                    // Only render visible pixels
+                    if (alpha > 0) {
+                        const canvasIdx = (y * w + x) * 4;
+                        combinedData[canvasIdx] = layerData[layerIdx];     // R
+                        combinedData[canvasIdx + 1] = layerData[layerIdx + 1]; // G
+                        combinedData[canvasIdx + 2] = layerData[layerIdx + 2]; // B
+                        combinedData[canvasIdx + 3] = alpha; // Use layer's alpha
+                    }
+                }
+            }
+        }
     }
 
-    // 4. Calculate Outline (Stroke) if enabled
+    // 3. Calculate Outline (Stroke) if enabled
     const outlineData = new Uint8ClampedArray(w * h * 4); 
     const outlineColor = hexToRgb(settings.outlineColor);
     
@@ -290,8 +375,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
         let queue: number[] = [];
         let nextQueue: number[] = [];
 
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
+        // Only check pixels within render region (with buffer)
+        for (let y = Math.max(0, renderRegion.y - 2); y < Math.min(h, renderRegion.y + renderRegion.height + 2); y++) {
+            for (let x = Math.max(0, renderRegion.x - 2); x < Math.min(w, renderRegion.x + renderRegion.width + 2); x++) {
                 if (isSolid(x, y)) {
                     const p = y * w + x;
                     grid[p] = 1;
@@ -330,7 +416,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
         }
     }
 
-    // 5. Merge Outline
+    // 4. Merge Outline
     for (let i = 0; i < combinedData.length; i += 4) {
         if (outlineData[i+3] > 0) {
             if (combinedData[i+3] === 0) {
@@ -342,31 +428,83 @@ export const Workstation: React.FC<WorkstationProps> = ({
         }
     }
 
-    const finalImageData = new ImageData(combinedData, w, h);
-    ctx.putImageData(finalImageData, 0, 0);
+    if (dirtyRectRef.current) {
+        // Partial Redraw - Only update the dirty region
+        const { x, y, width, height } = dirtyRectRef.current;
+        
+        // Create image data for only the dirty region
+        const dirtyImageData = new ImageData(
+            combinedData.slice(
+                (y * w + x) * 4, 
+                (y * w + x) * 4 + (width * height * 4)
+            ), 
+            width, 
+            height
+        );
+        
+        // Put only the dirty region back to canvas
+        ctx.putImageData(dirtyImageData, x, y);
+        
+        // Reset dirty rect after render
+        resetDirtyRect();
+    } else {
+        // Full Redraw - Update the entire canvas
+        const finalImageData = new ImageData(combinedData, w, h);
+        ctx.putImageData(finalImageData, 0, 0);
+    }
     
-    // 6. Draw Grid if enabled
+    // 5. Draw Grid if enabled
     if (settings.showGrid) {
         ctx.save();
         
-        // Set grid style - fine grid for 1px per cell
-        ctx.strokeStyle = settings.gridColor;
-        ctx.globalAlpha = settings.gridOpacity;
-        ctx.lineWidth = 0.5; // Fine line width for precise grid
+        // Set grid style - pixel grid with white lines between pixels, similar to Photoshop
+        ctx.strokeStyle = '#ffffff'; // Fixed white color for pixel grid
+        ctx.lineWidth = 1; // 1px line width
+        ctx.globalAlpha = 0.5; // Semi-transparent for better visibility
         
-        // Draw vertical grid lines at exact pixel boundaries
-        for (let x = 1; x < w; x++) {
+        // Draw vertical grid lines between pixels - use 0.5 offset to draw between pixels
+        for (let x = 0; x < w; x++) {
+            const lineX = x + 0.5;
             ctx.beginPath();
-            ctx.moveTo(x, 0); // Exact pixel boundary
-            ctx.lineTo(x, h);
+            ctx.moveTo(lineX, 0);
+            ctx.lineTo(lineX, h);
             ctx.stroke();
         }
         
-        // Draw horizontal grid lines at exact pixel boundaries
-        for (let y = 1; y < h; y++) {
+        // Draw horizontal grid lines between pixels - use 0.5 offset to draw between pixels
+        for (let y = 0; y < h; y++) {
+            const lineY = y + 0.5;
             ctx.beginPath();
-            ctx.moveTo(0, y); // Exact pixel boundary
-            ctx.lineTo(w, y);
+            ctx.moveTo(0, lineY);
+            ctx.lineTo(w, lineY);
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+    
+    // 6. Draw Symmetry Axis if enabled
+    if (symmetryEnabled) {
+        ctx.save();
+        
+        // Set axis style
+        ctx.strokeStyle = '#00cccc';
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = 1; // Slightly thicker than grid lines
+        
+        if (symmetryType === 'vertical') {
+            // Draw vertical axis at center
+            const centerX = Math.floor(w / 2);
+            ctx.beginPath();
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, h);
+            ctx.stroke();
+        } else {
+            // Draw horizontal axis at center
+            const centerY = Math.floor(h / 2);
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(w, centerY);
             ctx.stroke();
         }
         
@@ -375,11 +513,46 @@ export const Workstation: React.FC<WorkstationProps> = ({
     
     onCanvasReady(canvas);
 
-  }, [generatedBaseData, activeLayer, settings, onCanvasReady]);
+  }, [generatedBaseData, activeLayer, settings, onCanvasReady, resetDirtyRect]);
 
-  useEffect(() => {
-    renderFinalCanvas();
+  // Optimized Render with requestAnimationFrame and Debounce
+  const scheduleRender = useCallback(() => {
+    if (isRenderingRef.current) {
+      return;
+    }
+
+    isRenderingRef.current = true;
+    requestAnimationFrame(() => {
+      renderFinalCanvas();
+      isRenderingRef.current = false;
+    });
   }, [renderFinalCanvas]);
+
+  // Debounced Render for State Changes
+  const debouncedRender = useCallback(() => {
+    if (renderTimeoutRef.current) {
+      clearTimeout(renderTimeoutRef.current);
+    }
+    
+    renderTimeoutRef.current = setTimeout(() => {
+      scheduleRender();
+    }, 16); // ~60fps
+  }, [scheduleRender]);
+
+  // Update useEffect to use debounced render
+  useEffect(() => {
+    debouncedRender();
+    return () => {
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+      }
+    };
+  }, [debouncedRender]);
+
+  // Update renderFinalCanvas calls to use scheduleRender
+  useEffect(() => {
+    scheduleRender();
+  }, [generatedBaseData, scheduleRender]);
 
 
   const processImage = useCallback(() => {
@@ -545,8 +718,21 @@ export const Workstation: React.FC<WorkstationProps> = ({
     canvas.width = finalW;
     canvas.height = finalH;
     setGeneratedBaseData(finalImageData);
+    
+    // Update active layer size to match canvas size - create new empty layer to avoid infinite loop
+    setActiveLayer(prev => {
+      // Create new data array with matching dimensions
+      const newData = new Uint8ClampedArray(finalW * finalH * 4);
+      
+      return {
+        ...prev,
+        width: finalW,
+        height: finalH,
+        data: newData
+      };
+    });
 
-  }, [sourceImage, settings, setProcessingState]);
+  }, [sourceImage, settings, setProcessingState, setActiveLayer]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -570,6 +756,47 @@ export const Workstation: React.FC<WorkstationProps> = ({
   }, []);
 
 
+  /**
+   * 调整图片大小，使其最长边不超过1024像素
+   * @param img 原始图片对象
+   * @returns 调整大小后的图片对象
+   */
+  const resizeImage = (img: HTMLImageElement): HTMLImageElement => {
+    const MAX_SIZE = 1024;
+    const width = img.width;
+    const height = img.height;
+    
+    // 如果图片已经小于等于1024像素，直接返回
+    if (width <= MAX_SIZE && height <= MAX_SIZE) {
+      return img;
+    }
+    
+    // 计算缩放比例
+    const scale = Math.min(MAX_SIZE / width, MAX_SIZE / height);
+    const newWidth = Math.floor(width * scale);
+    const newHeight = Math.floor(height * scale);
+    
+    // 创建新的canvas和image对象
+    const canvas = document.createElement('canvas');
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return img;
+    
+    // 绘制缩放后的图片
+    ctx.imageSmoothingEnabled = false; // 保持像素风格
+    ctx.drawImage(img, 0, 0, newWidth, newHeight);
+    
+    // 创建新的Image对象
+    const resizedImg = new Image();
+    resizedImg.src = canvas.toDataURL('image/png');
+    resizedImg.width = newWidth;
+    resizedImg.height = newHeight;
+    
+    return resizedImg;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -577,7 +804,8 @@ export const Workstation: React.FC<WorkstationProps> = ({
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-          setSourceImage(img);
+          const resizedImg = resizeImage(img);
+          setSourceImage(resizedImg);
           setZoom(1); 
         };
         img.src = event.target?.result as string;
@@ -594,7 +822,8 @@ export const Workstation: React.FC<WorkstationProps> = ({
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-            setSourceImage(img);
+            const resizedImg = resizeImage(img);
+            setSourceImage(resizedImg);
             setZoom(1);
             };
             img.src = event.target?.result as string;
@@ -621,44 +850,184 @@ export const Workstation: React.FC<WorkstationProps> = ({
     if (!coords) return;
     const { x, y } = coords;
 
-    const updateLayer = (updateFn: (map: Map<string, number[]>) => void) => {
-        const newData = new Map<string, number[]>(activeLayer.data);
+    // Update Layer function for TypedArray with Delta Recording
+    const updateLayer = (updateFn: (data: Uint8ClampedArray) => void, recordChanges: boolean = true) => {
+        const originalData = activeLayer.data;
+        const newData = new Uint8ClampedArray(originalData);
+        const layerWidth = activeLayer.width;
+        
+        // Collect changes for history delta
+        const changes: Array<{
+          x: number;
+          y: number;
+          oldColor: [number, number, number, number];
+          newColor: [number, number, number, number];
+        }> = [];
+        
         updateFn(newData);
+        
+        // Record changes if needed
+        if (recordChanges) {
+            // This is a simplified approach - in practice, we'd only check modified area
+            // For now, we'll check all pixels in the brush area
+            const halfSize = Math.floor(brushSize / 2);
+            for (let dx = -halfSize; dx <= halfSize; dx++) {
+                for (let dy = -halfSize; dy <= halfSize; dy++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < layerWidth && ny >= 0 && ny < activeLayer.height) {
+                        const idx = (ny * layerWidth + nx) * 4;
+                        
+                        const oldColor: [number, number, number, number] = [
+                            originalData[idx],
+                            originalData[idx + 1],
+                            originalData[idx + 2],
+                            originalData[idx + 3]
+                        ];
+                        
+                        const newColor: [number, number, number, number] = [
+                            newData[idx],
+                            newData[idx + 1],
+                            newData[idx + 2],
+                            newData[idx + 3]
+                        ];
+                        
+                        // Only record actual changes
+                        if (oldColor[0] !== newColor[0] || oldColor[1] !== newColor[1] || 
+                            oldColor[2] !== newColor[2] || oldColor[3] !== newColor[3]) {
+                            changes.push({ x: nx, y: ny, oldColor, newColor });
+                        }
+                    }
+                }
+            }
+            
+            // Create and push delta if there are changes
+            if (changes.length > 0) {
+                const delta: HistoryDelta = {
+                    type: 'pixel',
+                    layerId: activeLayer.id,
+                    changes,
+                    timestamp: Date.now()
+                };
+                
+                // Create a wrapper object to match pushToHistory expectations
+                pushToHistory(delta);
+            }
+        }
+        
         setActiveLayer(prev => ({ ...prev, data: newData }));
     };
 
+    // Helper function to apply brush/eraser action with symmetry
+    const applySymmetryAction = (data: Uint8ClampedArray, action: (nx: number, ny: number) => void) => {
+        const layerWidth = activeLayer.width;
+        const layerHeight = activeLayer.height;
+        
+        // Apply action to original position
+        action(x, y);
+        
+        // Apply symmetry if enabled
+        if (symmetryEnabled) {
+            if (symmetryType === 'vertical') {
+                // Vertical symmetry - mirror over center vertical line
+                const centerX = Math.floor(layerWidth / 2);
+                const mirroredX = centerX + (centerX - x);
+                action(mirroredX, y);
+            } else {
+                // Horizontal symmetry - mirror over center horizontal line
+                const centerY = Math.floor(layerHeight / 2);
+                const mirroredY = centerY + (centerY - y);
+                action(x, mirroredY);
+            }
+        }
+    };
+    
     if (activeTool === 'brush') {
         const rgb = hexToRgb(brushColor);
-        updateLayer(map => {
+        // Update dirty rect with brush area
+        const halfSize = Math.floor(brushSize / 2);
+        updateDirtyRect(x - halfSize, y - halfSize, brushSize, brushSize);
+        
+        // Also update dirty rect for symmetry area if enabled
+        if (symmetryEnabled) {
+            if (symmetryType === 'vertical') {
+                const centerX = Math.floor(activeLayer.width / 2);
+                const mirroredX = centerX + (centerX - x);
+                updateDirtyRect(mirroredX - halfSize, y - halfSize, brushSize, brushSize);
+            } else {
+                const centerY = Math.floor(activeLayer.height / 2);
+                const mirroredY = centerY + (centerY - y);
+                updateDirtyRect(x - halfSize, mirroredY - halfSize, brushSize, brushSize);
+            }
+        }
+        
+        updateLayer(data => {
             // Calculate brush area (square centered at x,y with size brushSize)
-            const halfSize = Math.floor(brushSize / 2);
-            for (let dx = -halfSize; dx <= halfSize; dx++) {
-                for (let dy = -halfSize; dy <= halfSize; dy++) {
-                    const nx = x + dx;
-                    const ny = y + dy;
-                    // Check if the pixel is within canvas bounds
-                    if (nx >= 0 && nx < generatedBaseData.width && ny >= 0 && ny < generatedBaseData.height) {
-                        const key = `${nx},${ny}`;
-                        map.set(key, rgb);
+            const layerWidth = activeLayer.width;
+            
+            // Define brush action
+            const brushAction = (posX: number, posY: number) => {
+                for (let dx = -halfSize; dx <= halfSize; dx++) {
+                    for (let dy = -halfSize; dy <= halfSize; dy++) {
+                        const nx = posX + dx;
+                        const ny = posY + dy;
+                        // Check if the pixel is within canvas bounds
+                        if (nx >= 0 && nx < layerWidth && ny >= 0 && ny < activeLayer.height) {
+                            const idx = (ny * layerWidth + nx) * 4;
+                            data[idx] = rgb[0];     // R
+                            data[idx + 1] = rgb[1]; // G
+                            data[idx + 2] = rgb[2]; // B
+                            data[idx + 3] = 255;     // A (opaque)
+                        }
                     }
                 }
-            }
+            };
+            
+            // Apply brush action with symmetry
+            applySymmetryAction(data, brushAction);
         });
     } else if (activeTool === 'eraser') {
-        updateLayer(map => {
+        // Update dirty rect with eraser area
+        const halfSize = Math.floor(brushSize / 2);
+        updateDirtyRect(x - halfSize, y - halfSize, brushSize, brushSize);
+        
+        // Also update dirty rect for symmetry area if enabled
+        if (symmetryEnabled) {
+            if (symmetryType === 'vertical') {
+                const centerX = Math.floor(activeLayer.width / 2);
+                const mirroredX = centerX + (centerX - x);
+                updateDirtyRect(mirroredX - halfSize, y - halfSize, brushSize, brushSize);
+            } else {
+                const centerY = Math.floor(activeLayer.height / 2);
+                const mirroredY = centerY + (centerY - y);
+                updateDirtyRect(x - halfSize, mirroredY - halfSize, brushSize, brushSize);
+            }
+        }
+        
+        updateLayer(data => {
             // Calculate eraser area (square centered at x,y with size brushSize)
-            const halfSize = Math.floor(brushSize / 2);
-            for (let dx = -halfSize; dx <= halfSize; dx++) {
-                for (let dy = -halfSize; dy <= halfSize; dy++) {
-                    const nx = x + dx;
-                    const ny = y + dy;
-                    // Check if the pixel is within canvas bounds
-                    if (nx >= 0 && nx < generatedBaseData.width && ny >= 0 && ny < generatedBaseData.height) {
-                        const key = `${nx},${ny}`;
-                        map.delete(key);
+            const layerWidth = activeLayer.width;
+            
+            // Define eraser action
+            const eraserAction = (posX: number, posY: number) => {
+                for (let dx = -halfSize; dx <= halfSize; dx++) {
+                    for (let dy = -halfSize; dy <= halfSize; dy++) {
+                        const nx = posX + dx;
+                        const ny = posY + dy;
+                        // Check if the pixel is within canvas bounds
+                        if (nx >= 0 && nx < layerWidth && ny >= 0 && ny < activeLayer.height) {
+                            const idx = (ny * layerWidth + nx) * 4;
+                            data[idx] = 0;     // R
+                            data[idx + 1] = 0; // G
+                            data[idx + 2] = 0; // B
+                            data[idx + 3] = 0;     // A (transparent)
+                        }
                     }
                 }
-            }
+            };
+            
+            // Apply eraser action with symmetry
+            applySymmetryAction(data, eraserAction);
         });
     } else if (activeTool === 'eyedropper') {
         const canvas = canvasRef.current;
@@ -672,63 +1041,252 @@ export const Workstation: React.FC<WorkstationProps> = ({
         setIsDrawing(false); 
     } else if (activeTool === 'bucket') {
         const rgb = hexToRgb(brushColor);
-
+        const layerWidth = activeLayer.width;
+        const layerHeight = activeLayer.height;
+        
+        // Get start pixel color
+        const startIdx = (y * layerWidth + x) * 4;
+        const startR = activeLayer.data[startIdx];
+        const startG = activeLayer.data[startIdx + 1];
+        const startB = activeLayer.data[startIdx + 2];
+        const startA = activeLayer.data[startIdx + 3];
+        
+        // Check if start pixel is already the target color
+        if (startR === rgb[0] && startG === rgb[1] && startB === rgb[2] && startA === 255) {
+            return;
+        }
+        
         // BFS Flood Fill on the active layer
-        // If we click on an empty pixel, fill connected empty pixels.
-        // If we click on a colored pixel, fill connected pixels of that color.
-        
-        const startColor = activeLayer.data.get(key); // undefined if empty
-        
         // Safety: Limit flood fill to avoid infinite loops or massive lag in React state
-        // Max pixels to fill
-        const MAX_FILL = 2048; 
+        const MAX_FILL = 4096; // Increased fill limit
         let filledCount = 0;
-
+        
+        // Create array to hold all coordinates to fill
+        const allFillCoords: Array<{ x: number; y: number }> = [];
+        const allSymmetryCoords: Array<{ x: number; y: number }> = [];
+        
+        // Main flood fill
         const queue = [[x, y]];
-        const visited = new Set<string>();
-        visited.add(key);
-
-        const newMapData = new Map<string, number[]>(activeLayer.data);
-        const targetIsPresent = !!startColor;
-
+        const visited = new Set<number>();
+        visited.add(y * layerWidth + x);
+        
+        // Create dirty rect for the fill area
+        let minX = x;
+        let minY = y;
+        let maxX = x;
+        let maxY = y;
+        
         while (queue.length > 0 && filledCount < MAX_FILL) {
             const [cx, cy] = queue.shift()!;
-            const cKey = `${cx},${cy}`;
             
-            // Apply color
-            newMapData.set(cKey, rgb);
+            // Add to fill coordinates
+            allFillCoords.push({ x: cx, y: cy });
+            
+            // Add symmetry coordinates if enabled
+            if (symmetryEnabled) {
+                if (symmetryType === 'vertical') {
+                    // Vertical symmetry - mirror over center vertical line
+                    const centerX = Math.floor(layerWidth / 2);
+                    const mirroredX = centerX + (centerX - cx);
+                    if (mirroredX >= 0 && mirroredX < layerWidth) {
+                        allSymmetryCoords.push({ x: mirroredX, y: cy });
+                    }
+                } else {
+                    // Horizontal symmetry - mirror over center horizontal line
+                    const centerY = Math.floor(layerHeight / 2);
+                    const mirroredY = centerY + (centerY - cy);
+                    if (mirroredY >= 0 && mirroredY < layerHeight) {
+                        allSymmetryCoords.push({ x: cx, y: mirroredY });
+                    }
+                }
+            }
+            
             filledCount++;
-
+            
+            // Update dirty rect bounds
+            minX = Math.min(minX, cx);
+            minY = Math.min(minY, cy);
+            maxX = Math.max(maxX, cx);
+            maxY = Math.max(maxY, cy);
+            
             // Neighbors
             const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
             for (const [nx, ny] of neighbors) {
-                if (nx < 0 || ny < 0 || nx >= generatedBaseData.width || ny >= generatedBaseData.height) continue;
+                if (nx < 0 || ny < 0 || nx >= layerWidth || ny >= layerHeight) continue;
                 
-                const nKey = `${nx},${ny}`;
-                if (visited.has(nKey)) continue;
-
-                const nColor = activeLayer.data.get(nKey);
-                const nIsPresent = !!nColor;
-
-                let shouldFill = false;
-                if (!targetIsPresent) {
-                    // Filling empty space
-                    shouldFill = !nIsPresent;
-                } else {
-                    // Replacing color
-                    if (nIsPresent && nColor![0] === startColor![0] && nColor![1] === startColor![1] && nColor![2] === startColor![2]) {
-                        shouldFill = true;
-                    }
-                }
-
-                if (shouldFill) {
-                    visited.add(nKey);
+                const pixelKey = ny * layerWidth + nx;
+                if (visited.has(pixelKey)) continue;
+                
+                const nIdx = pixelKey * 4;
+                const nR = activeLayer.data[nIdx];
+                const nG = activeLayer.data[nIdx + 1];
+                const nB = activeLayer.data[nIdx + 2];
+                const nA = activeLayer.data[nIdx + 3];
+                
+                // Check if neighbor has the same color as start pixel
+                if (nR === startR && nG === startG && nB === startB && nA === startA) {
+                    visited.add(pixelKey);
                     queue.push([nx, ny]);
                 }
             }
         }
         
-        setActiveLayer(prev => ({ ...prev, data: newMapData }));
+        // Reset fill arrays and use a proper BFS approach
+        // We'll use a single array for all pixels to fill and properly handle symmetry
+        const pixelsToFill: Array<{ x: number; y: number }> = [];
+        const visited = new Set<number>();
+        const queue = [[x, y]];
+        visited.add(y * layerWidth + x);
+        
+        // Helper function to check if a pixel has the same color as the start pixel
+        const isSameColor = (px: number, py: number): boolean => {
+            if (px < 0 || px >= layerWidth || py < 0 || py >= layerHeight) {
+                return false;
+            }
+            const idx = (py * layerWidth + px) * 4;
+            return (
+                activeLayer.data[idx] === startR &&
+                activeLayer.data[idx + 1] === startG &&
+                activeLayer.data[idx + 2] === startB &&
+                activeLayer.data[idx + 3] === startA
+            );
+        };
+        
+        // Clear previous fill data
+        allFillCoords.length = 0;
+        allSymmetryCoords.length = 0;
+        
+        // Proper BFS flood fill that handles symmetry correctly
+        while (queue.length > 0 && pixelsToFill.length < MAX_FILL) {
+            const [cx, cy] = queue.shift()!;
+            
+            // Add current pixel to fill list
+            pixelsToFill.push({ x: cx, y: cy });
+            
+            // Get symmetric pixel if symmetry is enabled
+            if (symmetryEnabled) {
+                let symmetricX = cx;
+                let symmetricY = cy;
+                
+                if (symmetryType === 'vertical') {
+                    // Vertical symmetry - mirror over center vertical line
+                    const centerX = Math.floor(layerWidth / 2);
+                    symmetricX = centerX + (centerX - cx);
+                } else {
+                    // Horizontal symmetry - mirror over center horizontal line
+                    const centerY = Math.floor(layerHeight / 2);
+                    symmetricY = centerY + (centerY - cy);
+                }
+                
+                // Check if symmetric pixel is within bounds and has the same color
+                const symmetricKey = symmetricY * layerWidth + symmetricX;
+                if (
+                    symmetricX >= 0 && symmetricX < layerWidth &&
+                    symmetricY >= 0 && symmetricY < layerHeight &&
+                    !visited.has(symmetricKey) &&
+                    isSameColor(symmetricX, symmetricY)
+                ) {
+                    // Add symmetric pixel to queue and mark as visited
+                    visited.add(symmetricKey);
+                    queue.push([symmetricX, symmetricY]);
+                }
+            }
+            
+            // Check four neighbors (up, down, left, right)
+            const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
+            for (const [nx, ny] of neighbors) {
+                const neighborKey = ny * layerWidth + nx;
+                if (
+                    nx >= 0 && nx < layerWidth &&
+                    ny >= 0 && ny < layerHeight &&
+                    !visited.has(neighborKey) &&
+                    isSameColor(nx, ny)
+                ) {
+                    // Add neighbor to queue and mark as visited
+                    visited.add(neighborKey);
+                    queue.push([nx, ny]);
+                }
+            }
+        }
+        
+        // Create a copy of the original layer data
+        const originalData = activeLayer.data;
+        const newData = new Uint8ClampedArray(originalData);
+        
+        // Create changes array for history delta
+        const changes: Array<{
+          x: number;
+          y: number;
+          oldColor: [number, number, number, number];
+          newColor: [number, number, number, number];
+        }> = [];
+        
+        // Apply fill to all pixels and record changes
+        for (const { x: fillX, y: fillY } of pixelsToFill) {
+            if (fillX >= 0 && fillX < layerWidth && fillY >= 0 && fillY < layerHeight) {
+                const idx = (fillY * layerWidth + fillX) * 4;
+                
+                // Record old color for history
+                const oldColor: [number, number, number, number] = [
+                    originalData[idx],
+                    originalData[idx + 1],
+                    originalData[idx + 2],
+                    originalData[idx + 3]
+                ];
+                
+                // Apply new color
+                const newColor: [number, number, number, number] = [
+                    rgb[0],
+                    rgb[1],
+                    rgb[2],
+                    255
+                ];
+                
+                newData[idx] = newColor[0];     // R
+                newData[idx + 1] = newColor[1]; // G
+                newData[idx + 2] = newColor[2]; // B
+                newData[idx + 3] = newColor[3]; // A (opaque)
+                
+                // Record change if color actually changed
+                if (oldColor[0] !== newColor[0] || oldColor[1] !== newColor[1] || 
+                    oldColor[2] !== newColor[2] || oldColor[3] !== newColor[3]) {
+                    changes.push({ x: fillX, y: fillY, oldColor, newColor });
+                }
+            }
+        }
+        
+        // Update layer with new data
+        setActiveLayer(prev => ({ ...prev, data: newData }));
+        
+        // Record history delta if there are changes
+        if (changes.length > 0) {
+            const delta: HistoryDelta = {
+                type: 'pixel',
+                layerId: activeLayer.id,
+                changes,
+                timestamp: Date.now()
+            };
+            
+            pushToHistory(delta);
+        }
+        
+        // Calculate new dirty rect based on actual filled pixels
+        if (pixelsToFill.length > 0) {
+            let minFillX = pixelsToFill[0].x;
+            let minFillY = pixelsToFill[0].y;
+            let maxFillX = pixelsToFill[0].x;
+            let maxFillY = pixelsToFill[0].y;
+            
+            for (const { x: px, y: py } of pixelsToFill) {
+                minFillX = Math.min(minFillX, px);
+                minFillY = Math.min(minFillY, py);
+                maxFillX = Math.max(maxFillX, px);
+                maxFillY = Math.max(maxFillY, py);
+            }
+            
+            // Update dirty rect with the actual fill area
+            updateDirtyRect(minFillX, minFillY, maxFillX - minFillX + 1, maxFillY - minFillY + 1);
+        }
     }
   };
 
@@ -740,13 +1298,12 @@ export const Workstation: React.FC<WorkstationProps> = ({
     if (!coords) return;
     
     e.preventDefault();
-    pushToHistory(); // Save state before moving
     setIsMoving(true);
     setStartPos(coords);
     setMoveOffset({ dx: 0, dy: 0 });
     
     // Store initial layer data for reference during move
-    initialLayerDataRef.current = new Map(activeLayer.data);
+    initialLayerDataRef.current = new Uint8ClampedArray(activeLayer.data);
   };
 
   const handleMove = (e: React.PointerEvent) => {
@@ -763,22 +1320,89 @@ export const Workstation: React.FC<WorkstationProps> = ({
     setMoveOffset({ dx, dy });
     
     // Update layer data with offset
-    const newData = new Map<string, number[]>();
-    initialLayerDataRef.current.forEach((color, key) => {
-        const [x, y] = key.split(',').map(Number);
-        const newX = x + dx;
-        const newY = y + dy;
+    const newData = new Uint8ClampedArray(generatedBaseData.width * generatedBaseData.height * 4);
+    const layerWidth = activeLayer.width;
+    const layerHeight = activeLayer.height;
+    
+    // Iterate through initial data and apply offset
+    for (let y = 0; y < layerHeight; y++) {
+      for (let x = 0; x < layerWidth; x++) {
+        const idx = (y * layerWidth + x) * 4;
+        const alpha = initialLayerDataRef.current[idx + 3];
         
-        // Only keep pixels within canvas bounds
-        if (newX >= 0 && newX < generatedBaseData.width && newY >= 0 && newY < generatedBaseData.height) {
-            newData.set(`${newX},${newY}`, color);
+        if (alpha > 0) {
+          const newX = x + dx;
+          const newY = y + dy;
+          
+          // Only keep pixels within canvas bounds
+          if (newX >= 0 && newX < layerWidth && newY >= 0 && newY < layerHeight) {
+            const newIdx = (newY * layerWidth + newX) * 4;
+            newData[newIdx] = initialLayerDataRef.current[idx];
+            newData[newIdx + 1] = initialLayerDataRef.current[idx + 1];
+            newData[newIdx + 2] = initialLayerDataRef.current[idx + 2];
+            newData[newIdx + 3] = initialLayerDataRef.current[idx + 3];
+          }
         }
-    });
+      }
+    }
     
     setActiveLayer(prev => ({ ...prev, data: newData }));
   };
 
   const handleMoveEnd = () => {
+    if (initialLayerDataRef.current) {
+      // Record move operation for history
+      const changes: Array<{
+        x: number;
+        y: number;
+        oldColor: [number, number, number, number];
+        newColor: [number, number, number, number];
+      }> = [];
+      
+      const layerWidth = activeLayer.width;
+      const layerHeight = activeLayer.height;
+      const currentData = activeLayer.data;
+      
+      // Compare current data with initial data to find changes
+      for (let y = 0; y < layerHeight; y++) {
+        for (let x = 0; x < layerWidth; x++) {
+          const idx = (y * layerWidth + x) * 4;
+          
+          const oldColor: [number, number, number, number] = [
+            initialLayerDataRef.current[idx],
+            initialLayerDataRef.current[idx + 1],
+            initialLayerDataRef.current[idx + 2],
+            initialLayerDataRef.current[idx + 3]
+          ];
+          
+          const newColor: [number, number, number, number] = [
+            currentData[idx],
+            currentData[idx + 1],
+            currentData[idx + 2],
+            currentData[idx + 3]
+          ];
+          
+          // Only record actual changes
+          if (oldColor[0] !== newColor[0] || oldColor[1] !== newColor[1] || 
+              oldColor[2] !== newColor[2] || oldColor[3] !== newColor[3]) {
+            changes.push({ x, y, oldColor, newColor });
+          }
+        }
+      }
+      
+      // Create and push delta if there are changes
+      if (changes.length > 0) {
+        const delta: HistoryDelta = {
+          type: 'pixel',
+          layerId: activeLayer.id,
+          changes,
+          timestamp: Date.now()
+        };
+        
+        pushToHistory(delta);
+      }
+    }
+    
     setIsMoving(false);
     initialLayerDataRef.current = null;
   };
@@ -888,10 +1512,16 @@ export const Workstation: React.FC<WorkstationProps> = ({
             }
         } else if (key === 'b') {
             setActiveTool('brush');
-        } else if (key === 'g') {
-            setActiveTool('bucket');
+        } else if (key === 'v') {
+            setActiveTool('move');
         } else if (key === 'e') {
             setActiveTool('eraser');
+        } else if (key === 'g') {
+            setActiveTool('bucket');
+        } else if (key === 'p') {
+            setActiveTool('pan');
+        } else if (key === 'i') {
+            setActiveTool('eyedropper');
         } else if (key === '[') {
             // Decrease brush size
             e.preventDefault();
