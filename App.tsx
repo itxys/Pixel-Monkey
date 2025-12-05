@@ -10,7 +10,9 @@ import {
   Language, 
   DrawingTool,
   ProjectState,
-  Layer
+  Layer,
+  HistoryDelta,
+  HistoryEntry
 } from './types';
 
 const App: React.FC = () => {

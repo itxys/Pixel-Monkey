@@ -17,7 +17,7 @@ interface WorkstationProps {
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
   activeLayer: Layer;
   setActiveLayer: React.Dispatch<React.SetStateAction<Layer>>;
-  pushToHistory: () => void;
+  pushToHistory: (delta: HistoryDelta) => void;
   // Symmetry drawing props
   symmetryEnabled: boolean;
   symmetryType: 'vertical' | 'horizontal';
@@ -308,56 +308,44 @@ export const Workstation: React.FC<WorkstationProps> = ({
   // Main Rendering Pipeline - Direct Render
   const renderFinalCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !generatedBaseData) return;
+    if (!canvas || !activeLayer) return;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    const w = canvas.width;
-    const h = canvas.height;
+    // Use active layer dimensions as canvas dimensions
+    const w = activeLayer.width;
+    const h = activeLayer.height;
+    
+    // Ensure canvas has the correct dimensions
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
     
     // Determine render region
     const renderRegion = dirtyRectRef.current || { x: 0, y: 0, width: w, height: h };
     
-    // 1. Start with Generated Base (Background) for the render region
-    const combinedData = new Uint8ClampedArray(generatedBaseData.data);
+    // 0. Fill with棋盘格背景
+    ctx.save();
     
-    // 2. Render Active Layer
-    if (activeLayer && activeLayer.visible) {
-        const layerWidth = activeLayer.width;
-        const layerHeight = activeLayer.height;
-        const layerData = activeLayer.data;
-        
-        // Iterate through the layer data and render pixels within the render region
-        for (let y = 0; y < layerHeight; y++) {
-            // Check if this row is within the render region (with buffer)
-            if (y < renderRegion.y - 2 || y > renderRegion.y + renderRegion.height + 2) {
-                continue;
-            }
-            
-            for (let x = 0; x < layerWidth; x++) {
-                // Check if this column is within the render region (with buffer)
-                if (x < renderRegion.x - 2 || x > renderRegion.x + renderRegion.width + 2) {
-                    continue;
-                }
-                
-                // Check if pixel is within canvas bounds
-                if (x >= 0 && x < w && y >= 0 && y < h) {
-                    const layerIdx = (y * layerWidth + x) * 4;
-                    const alpha = layerData[layerIdx + 3];
-                    
-                    // Only render visible pixels
-                    if (alpha > 0) {
-                        const canvasIdx = (y * w + x) * 4;
-                        combinedData[canvasIdx] = layerData[layerIdx];     // R
-                        combinedData[canvasIdx + 1] = layerData[layerIdx + 1]; // G
-                        combinedData[canvasIdx + 2] = layerData[layerIdx + 2]; // B
-                        combinedData[canvasIdx + 3] = alpha; // Use layer's alpha
-                    }
-                }
-            }
-        }
+    // Draw checkerboard background
+    const checkSize = 8;
+    ctx.fillStyle = '#222222';
+    ctx.fillRect(0, 0, w, h);
+    
+    ctx.fillStyle = '#333333';
+    for (let y = 0; y < h; y += checkSize) {
+      for (let x = (y / checkSize) % 2 === 0 ? checkSize : 0; x < w; x += checkSize * 2) {
+        ctx.fillRect(x, y, checkSize, checkSize);
+      }
     }
+    
+    ctx.restore();
+    
+    // 1. Start with Active Layer (Main Image) for the render region
+    // We'll use the active layer as the main canvas, not the generated base
+    const combinedData = new Uint8ClampedArray(activeLayer.data);
 
     // 3. Calculate Outline (Stroke) if enabled
     const outlineData = new Uint8ClampedArray(w * h * 4); 
@@ -428,30 +416,49 @@ export const Workstation: React.FC<WorkstationProps> = ({
         }
     }
 
+    // Create a temporary canvas to draw the image data with transparency
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+    
+    // Draw the image data to the temporary canvas
+    tempCtx.putImageData(new ImageData(combinedData, w, h), 0, 0);
+    
+    // Ensure we're using the correct compositing mode for transparency
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    
     if (dirtyRectRef.current) {
         // Partial Redraw - Only update the dirty region
         const { x, y, width, height } = dirtyRectRef.current;
         
-        // Create image data for only the dirty region
-        const dirtyImageData = new ImageData(
-            combinedData.slice(
-                (y * w + x) * 4, 
-                (y * w + x) * 4 + (width * height * 4)
-            ), 
-            width, 
-            height
-        );
+        // First redraw the checkerboard for the dirty region
+        ctx.fillStyle = '#222222';
+        ctx.fillRect(x, y, width, height);
         
-        // Put only the dirty region back to canvas
-        ctx.putImageData(dirtyImageData, x, y);
+        const checkSize = 8;
+        ctx.fillStyle = '#333333';
+        for (let dy = 0; dy < height; dy += checkSize) {
+            for (let dx = ((y + dy) / checkSize) % 2 === 0 ? checkSize : 0; dx < width; dx += checkSize * 2) {
+                ctx.fillRect(x + dx, y + dy, checkSize, checkSize);
+            }
+        }
+        
+        // Draw only the dirty region from the temporary canvas to the main canvas
+        ctx.drawImage(tempCanvas, x, y, width, height, x, y, width, height);
         
         // Reset dirty rect after render
         resetDirtyRect();
     } else {
         // Full Redraw - Update the entire canvas
-        const finalImageData = new ImageData(combinedData, w, h);
-        ctx.putImageData(finalImageData, 0, 0);
+        // Checkerboard background already drawn earlier
+        // Draw the entire temporary canvas to the main canvas
+        ctx.drawImage(tempCanvas, 0, 0);
     }
+    
+    ctx.restore();
     
     // 5. Draw Grid if enabled
     if (settings.showGrid) {
@@ -552,7 +559,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
   // Update renderFinalCanvas calls to use scheduleRender
   useEffect(() => {
     scheduleRender();
-  }, [generatedBaseData, scheduleRender]);
+  }, [generatedBaseData, activeLayer, scheduleRender]);
 
 
   const processImage = useCallback(() => {
@@ -719,10 +726,19 @@ export const Workstation: React.FC<WorkstationProps> = ({
     canvas.height = finalH;
     setGeneratedBaseData(finalImageData);
     
-    // Update active layer size to match canvas size - create new empty layer to avoid infinite loop
+    // Update active layer size to match canvas size and fill with generated data
     setActiveLayer(prev => {
-      // Create new data array with matching dimensions
+      // Create new data array with matching dimensions and fill with generated data
       const newData = new Uint8ClampedArray(finalW * finalH * 4);
+      
+      // Fill the new layer with the generated pixel art data
+      for (let i = 0; i < finalData.length; i += 4) {
+        const newIdx = i;
+        newData[newIdx] = finalData[i];       // R
+        newData[newIdx + 1] = finalData[i + 1]; // G
+        newData[newIdx + 2] = finalData[i + 2]; // B
+        newData[newIdx + 3] = finalData[i + 3]; // A
+      }
       
       return {
         ...prev,
@@ -844,7 +860,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
 
   // Interaction Logic (Modified to work with Layers/Project)
   const performToolAction = (e: React.PointerEvent) => {
-    if (activeTool === 'pan' || !generatedBaseData) return;
+    if (activeTool === 'pan') return;
     
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
@@ -1061,82 +1077,12 @@ export const Workstation: React.FC<WorkstationProps> = ({
         const MAX_FILL = 4096; // Increased fill limit
         let filledCount = 0;
         
-        // Create array to hold all coordinates to fill
-        const allFillCoords: Array<{ x: number; y: number }> = [];
-        const allSymmetryCoords: Array<{ x: number; y: number }> = [];
-        
-        // Main flood fill
-        const queue = [[x, y]];
-        const visited = new Set<number>();
-        visited.add(y * layerWidth + x);
-        
-        // Create dirty rect for the fill area
-        let minX = x;
-        let minY = y;
-        let maxX = x;
-        let maxY = y;
-        
-        while (queue.length > 0 && filledCount < MAX_FILL) {
-            const [cx, cy] = queue.shift()!;
-            
-            // Add to fill coordinates
-            allFillCoords.push({ x: cx, y: cy });
-            
-            // Add symmetry coordinates if enabled
-            if (symmetryEnabled) {
-                if (symmetryType === 'vertical') {
-                    // Vertical symmetry - mirror over center vertical line
-                    const centerX = Math.floor(layerWidth / 2);
-                    const mirroredX = centerX + (centerX - cx);
-                    if (mirroredX >= 0 && mirroredX < layerWidth) {
-                        allSymmetryCoords.push({ x: mirroredX, y: cy });
-                    }
-                } else {
-                    // Horizontal symmetry - mirror over center horizontal line
-                    const centerY = Math.floor(layerHeight / 2);
-                    const mirroredY = centerY + (centerY - cy);
-                    if (mirroredY >= 0 && mirroredY < layerHeight) {
-                        allSymmetryCoords.push({ x: cx, y: mirroredY });
-                    }
-                }
-            }
-            
-            filledCount++;
-            
-            // Update dirty rect bounds
-            minX = Math.min(minX, cx);
-            minY = Math.min(minY, cy);
-            maxX = Math.max(maxX, cx);
-            maxY = Math.max(maxY, cy);
-            
-            // Neighbors
-            const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
-            for (const [nx, ny] of neighbors) {
-                if (nx < 0 || ny < 0 || nx >= layerWidth || ny >= layerHeight) continue;
-                
-                const pixelKey = ny * layerWidth + nx;
-                if (visited.has(pixelKey)) continue;
-                
-                const nIdx = pixelKey * 4;
-                const nR = activeLayer.data[nIdx];
-                const nG = activeLayer.data[nIdx + 1];
-                const nB = activeLayer.data[nIdx + 2];
-                const nA = activeLayer.data[nIdx + 3];
-                
-                // Check if neighbor has the same color as start pixel
-                if (nR === startR && nG === startG && nB === startB && nA === startA) {
-                    visited.add(pixelKey);
-                    queue.push([nx, ny]);
-                }
-            }
-        }
-        
-        // Reset fill arrays and use a proper BFS approach
+        // Use a proper BFS approach for flood fill
         // We'll use a single array for all pixels to fill and properly handle symmetry
         const pixelsToFill: Array<{ x: number; y: number }> = [];
-        const visited = new Set<number>();
-        const queue = [[x, y]];
-        visited.add(y * layerWidth + x);
+        const newVisited = new Set<number>();
+        const newQueue = [[x, y]];
+        newVisited.add(y * layerWidth + x);
         
         // Helper function to check if a pixel has the same color as the start pixel
         const isSameColor = (px: number, py: number): boolean => {
@@ -1152,45 +1098,15 @@ export const Workstation: React.FC<WorkstationProps> = ({
             );
         };
         
-        // Clear previous fill data
-        allFillCoords.length = 0;
-        allSymmetryCoords.length = 0;
-        
         // Proper BFS flood fill that handles symmetry correctly
-        while (queue.length > 0 && pixelsToFill.length < MAX_FILL) {
-            const [cx, cy] = queue.shift()!;
+        while (newQueue.length > 0 && pixelsToFill.length < MAX_FILL) {
+            const [cx, cy] = newQueue.shift()!;
             
             // Add current pixel to fill list
             pixelsToFill.push({ x: cx, y: cy });
             
-            // Get symmetric pixel if symmetry is enabled
-            if (symmetryEnabled) {
-                let symmetricX = cx;
-                let symmetricY = cy;
-                
-                if (symmetryType === 'vertical') {
-                    // Vertical symmetry - mirror over center vertical line
-                    const centerX = Math.floor(layerWidth / 2);
-                    symmetricX = centerX + (centerX - cx);
-                } else {
-                    // Horizontal symmetry - mirror over center horizontal line
-                    const centerY = Math.floor(layerHeight / 2);
-                    symmetricY = centerY + (centerY - cy);
-                }
-                
-                // Check if symmetric pixel is within bounds and has the same color
-                const symmetricKey = symmetricY * layerWidth + symmetricX;
-                if (
-                    symmetricX >= 0 && symmetricX < layerWidth &&
-                    symmetricY >= 0 && symmetricY < layerHeight &&
-                    !visited.has(symmetricKey) &&
-                    isSameColor(symmetricX, symmetricY)
-                ) {
-                    // Add symmetric pixel to queue and mark as visited
-                    visited.add(symmetricKey);
-                    queue.push([symmetricX, symmetricY]);
-                }
-            }
+            // Skip adding symmetric pixels to queue - we'll handle symmetry after the main fill
+            // This prevents diamond-shaped fills and ensures proper BFS flood fill
             
             // Check four neighbors (up, down, left, right)
             const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
@@ -1199,12 +1115,12 @@ export const Workstation: React.FC<WorkstationProps> = ({
                 if (
                     nx >= 0 && nx < layerWidth &&
                     ny >= 0 && ny < layerHeight &&
-                    !visited.has(neighborKey) &&
+                    !newVisited.has(neighborKey) &&
                     isSameColor(nx, ny)
                 ) {
                     // Add neighbor to queue and mark as visited
-                    visited.add(neighborKey);
-                    queue.push([nx, ny]);
+                    newVisited.add(neighborKey);
+                    newQueue.push([nx, ny]);
                 }
             }
         }
@@ -1255,6 +1171,60 @@ export const Workstation: React.FC<WorkstationProps> = ({
             }
         }
         
+        // Handle symmetry if enabled - apply after main fill to avoid diamond-shaped fills
+        if (symmetryEnabled) {
+            // Apply symmetric fill to all already filled pixels
+            for (const { x: fillX, y: fillY } of pixelsToFill) {
+                let symmetricX = fillX;
+                let symmetricY = fillY;
+                
+                if (symmetryType === 'vertical') {
+                    // Vertical symmetry - mirror over center vertical line
+                    const centerX = Math.floor(layerWidth / 2);
+                    symmetricX = centerX + (centerX - fillX);
+                } else {
+                    // Horizontal symmetry - mirror over center horizontal line
+                    const centerY = Math.floor(layerHeight / 2);
+                    symmetricY = centerY + (centerY - fillY);
+                }
+                
+                // Only apply symmetric fill if it's a different pixel
+                if (symmetricX !== fillX || symmetricY !== fillY) {
+                    // Check if symmetric pixel is within bounds
+                    if (symmetricX >= 0 && symmetricX < layerWidth && symmetricY >= 0 && symmetricY < layerHeight) {
+                        const idx = (symmetricY * layerWidth + symmetricX) * 4;
+                        
+                        // Record old color for history
+                        const oldColor: [number, number, number, number] = [
+                            originalData[idx],
+                            originalData[idx + 1],
+                            originalData[idx + 2],
+                            originalData[idx + 3]
+                        ];
+                        
+                        // Apply new color
+                        const newColor: [number, number, number, number] = [
+                            rgb[0],
+                            rgb[1],
+                            rgb[2],
+                            255
+                        ];
+                        
+                        newData[idx] = newColor[0];     // R
+                        newData[idx + 1] = newColor[1]; // G
+                        newData[idx + 2] = newColor[2]; // B
+                        newData[idx + 3] = newColor[3]; // A (opaque)
+                        
+                        // Record change if color actually changed
+                        if (oldColor[0] !== newColor[0] || oldColor[1] !== newColor[1] || 
+                            oldColor[2] !== newColor[2] || oldColor[3] !== newColor[3]) {
+                            changes.push({ x: symmetricX, y: symmetricY, oldColor, newColor });
+                        }
+                    }
+                }
+            }
+        }
+        
         // Update layer with new data
         setActiveLayer(prev => ({ ...prev, data: newData }));
         
@@ -1292,7 +1262,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
 
   // Move Tool Logic
   const handleMoveStart = (e: React.PointerEvent) => {
-    if (activeTool !== 'move' || !generatedBaseData) return;
+    if (activeTool !== 'move') return;
     
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
@@ -1307,7 +1277,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
   };
 
   const handleMove = (e: React.PointerEvent) => {
-    if (!isMoving || !generatedBaseData || !initialLayerDataRef.current) return;
+    if (!isMoving || !initialLayerDataRef.current) return;
     
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
@@ -1320,9 +1290,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
     setMoveOffset({ dx, dy });
     
     // Update layer data with offset
-    const newData = new Uint8ClampedArray(generatedBaseData.width * generatedBaseData.height * 4);
     const layerWidth = activeLayer.width;
     const layerHeight = activeLayer.height;
+    const newData = new Uint8ClampedArray(layerWidth * layerHeight * 4);
     
     // Iterate through initial data and apply offset
     for (let y = 0; y < layerHeight; y++) {
@@ -1441,8 +1411,6 @@ export const Workstation: React.FC<WorkstationProps> = ({
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (!sourceImage) return;
-    
     // Handle pan tool separately
     if (activeTool === 'pan') {
         handlePanStart(e);
@@ -1456,7 +1424,6 @@ export const Workstation: React.FC<WorkstationProps> = ({
     }
     
     e.preventDefault(); 
-    pushToHistory(); // Save state before action
     setIsDrawing(true);
     performToolAction(e);
   };

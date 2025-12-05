@@ -52,8 +52,12 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
             P//M
           </h1>
           <div className="flex gap-1">
-            <button onClick={undo} className="p-1 hover:text-[#ffb000]" title={t.undo}></button>
-            <button onClick={redo} className="p-1 hover:text-[#ffb000]" title={t.redo}></button>
+            <button onClick={undo} className="p-1 hover:text-[#ffb000]" title={t.undo}>
+                <Undo className="w-4 h-4" />
+            </button>
+            <button onClick={redo} className="p-1 hover:text-[#ffb000]" title={t.redo}>
+                <Redo className="w-4 h-4" />
+            </button>
             <button onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')} className="p-1 text-[#ffb000] border border-[#ffb000] ml-1">
                 <Languages className="w-4 h-4" />
             </button>
