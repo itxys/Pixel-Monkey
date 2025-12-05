@@ -261,15 +261,17 @@ export const Workstation: React.FC<WorkstationProps> = ({
   const dirtyRectRef = useRef<{x: number, y: number, width: number, height: number} | null>(null);
   
   // Update Dirty Rect with Brush Area
-  const updateDirtyRect = useCallback((x: number, y: number, width: number, height: number) => {
-    const canvasWidth = generatedBaseData?.width || 0;
-    const canvasHeight = generatedBaseData?.height || 0;
+  const updateDirtyRect = useCallback((x: number, y: number, brushSize: number) => {
+    const canvasWidth = activeLayer.width;
+    const canvasHeight = activeLayer.height;
+    const halfSize = Math.floor(brushSize / 2);
     
-    // Ensure coordinates are within bounds
-    const newX = Math.max(0, x);
-    const newY = Math.max(0, y);
-    const newWidth = Math.min(width, canvasWidth - newX);
-    const newHeight = Math.min(height, canvasHeight - newY);
+    // Calculate brush area (add some padding to ensure full coverage)
+    const padding = 1;
+    const newX = Math.max(0, x - halfSize - padding);
+    const newY = Math.max(0, y - halfSize - padding);
+    const newWidth = Math.min(canvasWidth - newX, brushSize + padding * 2);
+    const newHeight = Math.min(canvasHeight - newY, brushSize + padding * 2);
     
     if (newWidth <= 0 || newHeight <= 0) {
       return;
@@ -298,7 +300,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
         height: newHeight
       };
     }
-  }, [generatedBaseData]);
+  }, [activeLayer.width, activeLayer.height]);
   
   // Reset Dirty Rect
   const resetDirtyRect = useCallback(() => {
@@ -325,23 +327,6 @@ export const Workstation: React.FC<WorkstationProps> = ({
     
     // Determine render region
     const renderRegion = dirtyRectRef.current || { x: 0, y: 0, width: w, height: h };
-    
-    // 0. Fill with棋盘格背景
-    ctx.save();
-    
-    // Draw checkerboard background
-    const checkSize = 8;
-    ctx.fillStyle = '#222222';
-    ctx.fillRect(0, 0, w, h);
-    
-    ctx.fillStyle = '#333333';
-    for (let y = 0; y < h; y += checkSize) {
-      for (let x = (y / checkSize) % 2 === 0 ? checkSize : 0; x < w; x += checkSize * 2) {
-        ctx.fillRect(x, y, checkSize, checkSize);
-      }
-    }
-    
-    ctx.restore();
     
     // 1. Start with Active Layer (Main Image) for the render region
     // We'll use the active layer as the main canvas, not the generated base
@@ -416,47 +401,30 @@ export const Workstation: React.FC<WorkstationProps> = ({
         }
     }
 
-    // Create a temporary canvas to draw the image data with transparency
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = w;
-    tempCanvas.height = h;
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return;
-    
-    // Draw the image data to the temporary canvas
-    tempCtx.putImageData(new ImageData(combinedData, w, h), 0, 0);
-    
-    // Ensure we're using the correct compositing mode for transparency
+    // Ensure we're using the correct compositing mode
     ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
     
-    if (dirtyRectRef.current) {
-        // Partial Redraw - Only update the dirty region
-        const { x, y, width, height } = dirtyRectRef.current;
-        
-        // First redraw the checkerboard for the dirty region
-        ctx.fillStyle = '#222222';
-        ctx.fillRect(x, y, width, height);
-        
-        const checkSize = 8;
-        ctx.fillStyle = '#333333';
-        for (let dy = 0; dy < height; dy += checkSize) {
-            for (let dx = ((y + dy) / checkSize) % 2 === 0 ? checkSize : 0; dx < width; dx += checkSize * 2) {
-                ctx.fillRect(x + dx, y + dy, checkSize, checkSize);
+    // Always do full redraw to avoid flickering issues
+    // Draw checkerboard background first
+    const checkSize = 8;
+    ctx.fillStyle = '#222222';
+    ctx.fillRect(0, 0, w, h);
+    
+    ctx.fillStyle = '#333333';
+    for (let y = 0; y < h; y += checkSize) {
+        for (let x = 0; x < w; x += checkSize) {
+            if ((Math.floor(x / checkSize) + Math.floor(y / checkSize)) % 2 === 1) {
+                ctx.fillRect(x, y, checkSize, checkSize);
             }
         }
-        
-        // Draw only the dirty region from the temporary canvas to the main canvas
-        ctx.drawImage(tempCanvas, x, y, width, height, x, y, width, height);
-        
-        // Reset dirty rect after render
-        resetDirtyRect();
-    } else {
-        // Full Redraw - Update the entire canvas
-        // Checkerboard background already drawn earlier
-        // Draw the entire temporary canvas to the main canvas
-        ctx.drawImage(tempCanvas, 0, 0);
     }
+    
+    // Then draw the image data
+    const finalImageData = new ImageData(combinedData, w, h);
+    ctx.putImageData(finalImageData, 0, 0);
+    
+    // Reset dirty rect after render
+    resetDirtyRect();
     
     ctx.restore();
     
@@ -520,9 +488,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
     
     onCanvasReady(canvas);
 
-  }, [generatedBaseData, activeLayer, settings, onCanvasReady, resetDirtyRect]);
+  }, [activeLayer, settings, onCanvasReady, resetDirtyRect]);
 
-  // Optimized Render with requestAnimationFrame and Debounce
+  // Optimized Render with requestAnimationFrame
   const scheduleRender = useCallback(() => {
     if (isRenderingRef.current) {
       return;
@@ -535,31 +503,22 @@ export const Workstation: React.FC<WorkstationProps> = ({
     });
   }, [renderFinalCanvas]);
 
-  // Debounced Render for State Changes
-  const debouncedRender = useCallback(() => {
-    if (renderTimeoutRef.current) {
-      clearTimeout(renderTimeoutRef.current);
-    }
-    
-    renderTimeoutRef.current = setTimeout(() => {
-      scheduleRender();
-    }, 16); // ~60fps
-  }, [scheduleRender]);
-
-  // Update useEffect to use debounced render
-  useEffect(() => {
-    debouncedRender();
-    return () => {
-      if (renderTimeoutRef.current) {
-        clearTimeout(renderTimeoutRef.current);
-      }
-    };
-  }, [debouncedRender]);
-
-  // Update renderFinalCanvas calls to use scheduleRender
+  // Direct render for state changes - no debounce to improve responsiveness
   useEffect(() => {
     scheduleRender();
-  }, [generatedBaseData, activeLayer, scheduleRender]);
+  }, [scheduleRender, settings]);
+
+  // Only schedule render when generatedBaseData changes (initial load)
+  useEffect(() => {
+    if (generatedBaseData) {
+      scheduleRender();
+    }
+  }, [generatedBaseData, scheduleRender]);
+  
+  // Direct render when activeLayer changes for immediate visual feedback
+  useEffect(() => {
+    scheduleRender();
+  }, [scheduleRender, activeLayer]);
 
 
   const processImage = useCallback(() => {
@@ -961,25 +920,25 @@ export const Workstation: React.FC<WorkstationProps> = ({
     if (activeTool === 'brush') {
         const rgb = hexToRgb(brushColor);
         // Update dirty rect with brush area
-        const halfSize = Math.floor(brushSize / 2);
-        updateDirtyRect(x - halfSize, y - halfSize, brushSize, brushSize);
+        updateDirtyRect(x, y, brushSize);
         
         // Also update dirty rect for symmetry area if enabled
         if (symmetryEnabled) {
             if (symmetryType === 'vertical') {
                 const centerX = Math.floor(activeLayer.width / 2);
                 const mirroredX = centerX + (centerX - x);
-                updateDirtyRect(mirroredX - halfSize, y - halfSize, brushSize, brushSize);
+                updateDirtyRect(mirroredX, y, brushSize);
             } else {
                 const centerY = Math.floor(activeLayer.height / 2);
                 const mirroredY = centerY + (centerY - y);
-                updateDirtyRect(x - halfSize, mirroredY - halfSize, brushSize, brushSize);
+                updateDirtyRect(x, mirroredY, brushSize);
             }
         }
         
         updateLayer(data => {
             // Calculate brush area (square centered at x,y with size brushSize)
             const layerWidth = activeLayer.width;
+            const halfSize = Math.floor(brushSize / 2);
             
             // Define brush action
             const brushAction = (posX: number, posY: number) => {
@@ -1004,25 +963,25 @@ export const Workstation: React.FC<WorkstationProps> = ({
         });
     } else if (activeTool === 'eraser') {
         // Update dirty rect with eraser area
-        const halfSize = Math.floor(brushSize / 2);
-        updateDirtyRect(x - halfSize, y - halfSize, brushSize, brushSize);
+        updateDirtyRect(x, y, brushSize);
         
         // Also update dirty rect for symmetry area if enabled
         if (symmetryEnabled) {
             if (symmetryType === 'vertical') {
                 const centerX = Math.floor(activeLayer.width / 2);
                 const mirroredX = centerX + (centerX - x);
-                updateDirtyRect(mirroredX - halfSize, y - halfSize, brushSize, brushSize);
+                updateDirtyRect(mirroredX, y, brushSize);
             } else {
                 const centerY = Math.floor(activeLayer.height / 2);
                 const mirroredY = centerY + (centerY - y);
-                updateDirtyRect(x - halfSize, mirroredY - halfSize, brushSize, brushSize);
+                updateDirtyRect(x, mirroredY, brushSize);
             }
         }
         
         updateLayer(data => {
             // Calculate eraser area (square centered at x,y with size brushSize)
             const layerWidth = activeLayer.width;
+            const halfSize = Math.floor(brushSize / 2);
             
             // Define eraser action
             const eraserAction = (posX: number, posY: number) => {
