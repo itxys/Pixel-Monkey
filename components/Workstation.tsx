@@ -401,32 +401,35 @@ export const Workstation: React.FC<WorkstationProps> = ({
         }
     }
 
-    // Ensure we're using the correct compositing mode
-    ctx.save();
-    
     // Always do full redraw to avoid flickering issues
-    // Draw checkerboard background first
+    
+    // 1. Clear canvas with transparent black
+    ctx.clearRect(0, 0, w, h);
+    
+    // 2. Draw checkerboard background first
     const checkSize = 8;
+    
+    // Fill with base color
     ctx.fillStyle = '#222222';
     ctx.fillRect(0, 0, w, h);
     
+    // Draw checkerboard squares
     ctx.fillStyle = '#333333';
     for (let y = 0; y < h; y += checkSize) {
         for (let x = 0; x < w; x += checkSize) {
+            // Draw checkerboard squares in alternating pattern
             if ((Math.floor(x / checkSize) + Math.floor(y / checkSize)) % 2 === 1) {
                 ctx.fillRect(x, y, checkSize, checkSize);
             }
         }
     }
     
-    // Then draw the image data
+    // 3. Then draw the image data with correct transparency handling
     const finalImageData = new ImageData(combinedData, w, h);
     ctx.putImageData(finalImageData, 0, 0);
     
     // Reset dirty rect after render
     resetDirtyRect();
-    
-    ctx.restore();
     
     // 5. Draw Grid if enabled
     if (settings.showGrid) {

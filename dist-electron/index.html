@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pixel Monkey</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Retro Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    
+    <style>
+      /* Scale UI by 56% total (20% + 30%) */
+      html {
+        font-size: 156%; /* 16px * 1.2 * 1.3 = 24.96px */
+      }
+      
+      /* Retro Font Utilities */
+      .font-retro-title {
+        font-family: 'Press Start 2P', cursive;
+      }
+      .font-retro-text {
+        font-family: 'VT323', monospace;
+      }
+
+      /* Pixel Perfect Rendering */
+      .pixelated-canvas {
+        image-rendering: -moz-crisp-edges;
+        image-rendering: -webkit-crisp-edges;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      
+      /* CASSETTE FUTURISM SCROLLBAR */
+      ::-webkit-scrollbar {
+        width: 14px;
+        height: 14px;
+        background: #000;
+      }
+      ::-webkit-scrollbar-track {
+        background: #111; 
+        border-left: 1px solid #333;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #ffb000; 
+        border: 2px solid #000;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #ffcc00; 
+      }
+
+      /* CRT SCANLINE EFFECT */
+      .scanlines {
+        background: linear-gradient(
+          to bottom,
+          rgba(255,255,255,0),
+          rgba(255,255,255,0) 50%,
+          rgba(0,0,0,0.2) 50%,
+          rgba(0,0,0,0.2)
+        );
+        background-size: 100% 4px;
+        position: absolute;
+        top: 0; 
+        left: 0; 
+        right: 0; 
+        bottom: 0;
+        pointer-events: none;
+        z-index: 50;
+        opacity: 0.15;
+      }
+
+      /* INDUSTRIAL BORDERS */
+      .cassette-border {
+        position: relative;
+        background-color: #1a1a1a;
+        border: 2px solid #333;
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      }
+      
+      .cassette-btn {
+        clip-path: polygon(
+          0 0, 
+          100% 0, 
+          100% calc(100% - 8px), 
+          calc(100% - 8px) 100%, 
+          0 100%
+        );
+        transition: all 0.1s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .cassette-btn:active {
+        transform: translateY(2px);
+      }
+
+      /* INDUSTRIAL SLIDER */
+      input[type=range] {
+        -webkit-appearance: none;
+        width: 100%;
+        background: transparent;
+      }
+      input[type=range]:focus {
+        outline: none;
+      }
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 16px;
+        width: 24px;
+        background: #ffb000;
+        cursor: pointer;
+        margin-top: -6px;
+        clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+        box-shadow: 0 0 5px #ffb000;
+      }
+      input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        cursor: pointer;
+        background: #333;
+        border: 1px solid #111;
+      }
+      
+      .text-glow {
+        text-shadow: 0 0 4px currentColor;
+      }
+
+      /* COLOR PICKER STYLES */
+      .cp-saturation-gradient {
+        background: linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, transparent);
+      }
+      .cp-hue-gradient {
+        background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+      }
+    </style>
+
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/assets/index-BASFxTdo.js"></script>
+</head>
+  <body class="bg-[#050505] text-[#ccc] h-screen overflow-hidden font-retro-text selection:bg-[#ffb000] selection:text-black">
+    <div id="root" class="h-full flex flex-col relative"></div>
+  </body>
+</html>

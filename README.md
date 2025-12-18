@@ -2,7 +2,7 @@
 
 **Pixel Monkey** is a professional-grade browser-based tool designed to convert high-resolution images into authentic, crisp pixel art. Unlike standard downscaling tools that produce blurry edges, Pixel Monkey uses advanced quantization algorithms (Dominant Color Sampling & K-Means) to ensure razor-sharp, NES/SNES-style graphics.
 
-It doubles as a full-featured pixel art editor with layer support, animation capabilities, and AI-powered tools powered by Google Gemini.
+It doubles as a full-featured pixel art editor with layer support and animation capabilities.
 
 ## 🌟 Key Features
 
@@ -22,10 +22,7 @@ It doubles as a full-featured pixel art editor with layer support, animation cap
 *   **Onion Skinning**: See previous frames to guide animation.
 *   **Playback**: Adjustable FPS control.
 
-### 🤖 AI Integration (Google Gemini)
-*   **AI Analysis**: Generates retro RPG descriptions and mood analysis for your art.
-*   **AI Edit**: Use text prompts (e.g., "Make it cyberpunk", "Remove background") to transform sprites.
-*   **AI Inbetweening**: Generate the next frame of an animation using AI context awareness.
+
 
 ## ⌨️ Keyboard Shortcuts
 
@@ -42,8 +39,6 @@ It doubles as a full-featured pixel art editor with layer support, animation cap
 ## 🚀 Technology Stack
 
 *   **Frontend**: React 19, TypeScript
-*   **Styling**: Tailwind CSS (Custom "Cassette Futurism" aesthetic)
-*   **AI**: Google GenAI SDK (`gemini-2.5-flash`, `gemini-2.5-flash-image`)
 *   **Icons**: Lucide React
 *   **Fonts**: 'Press Start 2P' & 'VT323' (Google Fonts)
 
@@ -54,9 +49,8 @@ It doubles as a full-featured pixel art editor with layer support, animation cap
     ```bash
     npm install
     ```
-3.  **Set up Environment**:
-    Ensure `process.env.API_KEY` is available with a valid Google Gemini API Key.
-4.  **Run the app**:
+
+3.  **Run the app**:
     ```bash
     npm start
     ```
