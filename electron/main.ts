@@ -19,7 +19,6 @@ function createWindow() {
     win.loadFile(path.join(__dirname, '../index.html'))
   } else {
     win.loadURL('http://localhost:3000') // 使用项目配置的端口3000
-    win.webContents.openDevTools()
   }
 }
 

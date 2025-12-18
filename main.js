@@ -16,7 +16,6 @@ function createWindow() {
 
   // 加载Vite开发服务器
   win.loadURL('http://localhost:3000');
-  win.webContents.openDevTools();
 }
 
 // 应用就绪时创建窗口

@@ -739,7 +739,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
    * @param img 原始图片对象
    * @returns 调整大小后的图片对象
    */
-  const resizeImage = (img: HTMLImageElement): HTMLImageElement => {
+  const resizeImage = useCallback((img: HTMLImageElement): HTMLImageElement => {
     const MAX_SIZE = 1024;
     const width = img.width;
     const height = img.height;
@@ -773,40 +773,35 @@ export const Workstation: React.FC<WorkstationProps> = ({
     resizedImg.height = newHeight;
     
     return resizedImg;
-  };
+  }, []);
+
+  const loadImageFromFile = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const resizedImg = resizeImage(img);
+        setSourceImage(resizedImg);
+        setZoom(1);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }, [resizeImage, setSourceImage, setZoom]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const resizedImg = resizeImage(img);
-          setSourceImage(resizedImg);
-          setZoom(1); 
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+      loadImageFromFile(file);
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-            const resizedImg = resizeImage(img);
-            setSourceImage(resizedImg);
-            setZoom(1);
-            };
-            img.src = event.target?.result as string;
-        };
-        reader.readAsDataURL(file);
+    if (file) {
+        loadImageFromFile(file);
     }
   };
 
@@ -1501,6 +1496,28 @@ export const Workstation: React.FC<WorkstationProps> = ({
         }
     };
   }, [zoom, setZoom]);
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) {
+                    e.preventDefault();
+                    loadImageFromFile(file);
+                    break;
+                }
+            }
+        }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => {
+        window.removeEventListener('paste', handlePaste);
+    };
+  }, [loadImageFromFile]);
 
 
   return (
