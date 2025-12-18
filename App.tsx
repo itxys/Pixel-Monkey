@@ -43,6 +43,8 @@ const App: React.FC = () => {
   // Symmetry drawing state
   const [symmetryEnabled, setSymmetryEnabled] = useState(false);
   const [symmetryType, setSymmetryType] = useState<'vertical' | 'horizontal'>('vertical');
+  const [verticalSymmetryPosition, setVerticalSymmetryPosition] = useState<number>(0.5);
+  const [horizontalSymmetryPosition, setHorizontalSymmetryPosition] = useState<number>(0.5);
 
   const createLayer = (name: string, width = 32, height = 32): Layer => ({
     id: crypto.randomUUID(),
@@ -283,6 +285,10 @@ const App: React.FC = () => {
               setSymmetryEnabled={setSymmetryEnabled}
               symmetryType={symmetryType}
               setSymmetryType={setSymmetryType}
+              verticalSymmetryPosition={verticalSymmetryPosition}
+              setVerticalSymmetryPosition={setVerticalSymmetryPosition}
+              horizontalSymmetryPosition={horizontalSymmetryPosition}
+              setHorizontalSymmetryPosition={setHorizontalSymmetryPosition}
             />
 
             {/* CENTER: Canvas */}
@@ -305,6 +311,8 @@ const App: React.FC = () => {
                   pushToHistory={pushToHistory}
                   symmetryEnabled={symmetryEnabled}
                   symmetryType={symmetryType}
+                  verticalSymmetryPosition={verticalSymmetryPosition}
+                  horizontalSymmetryPosition={horizontalSymmetryPosition}
                 />
             </div>
 

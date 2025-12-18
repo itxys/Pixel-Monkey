@@ -21,6 +21,8 @@ interface WorkstationProps {
   // Symmetry drawing props
   symmetryEnabled: boolean;
   symmetryType: 'vertical' | 'horizontal';
+  verticalSymmetryPosition: number;
+  horizontalSymmetryPosition: number;
 }
 
 // ---- Optimized Core Algorithm ----
@@ -228,7 +230,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
   setActiveLayer,
   pushToHistory,
   symmetryEnabled,
-  symmetryType
+  symmetryType,
+  verticalSymmetryPosition,
+  horizontalSymmetryPosition
 }) => {
   const t = LABELS[language];
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
@@ -252,6 +256,54 @@ export const Workstation: React.FC<WorkstationProps> = ({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   
   
+  /**
+   * 计算对称线覆盖层样式，使其在像素之间显示为恒定物理宽度细线
+   */
+  const getSymmetryOverlayStyle = (): React.CSSProperties | null => {
+    if (!symmetryEnabled) {
+      return null;
+    }
+
+    const layerWidth = activeLayer.width;
+    const layerHeight = activeLayer.height;
+
+    if (!layerWidth || !layerHeight || zoom <= 0) {
+      return null;
+    }
+
+    const baseStyle: React.CSSProperties = {
+      position: 'absolute',
+      pointerEvents: 'none',
+      backgroundColor: '#00cccc',
+      opacity: 0.7,
+    };
+
+    const lineWidth = 1 / zoom;
+
+    if (symmetryType === 'vertical') {
+      const axisPosition = Math.min(Math.max(verticalSymmetryPosition, 0), 1);
+      const axisX = axisPosition * layerWidth;
+
+      return {
+        ...baseStyle,
+        top: 0,
+        bottom: 0,
+        width: lineWidth,
+        left: axisX - lineWidth / 2,
+      };
+    }
+
+    const axisPosition = Math.min(Math.max(horizontalSymmetryPosition, 0), 1);
+    const axisY = axisPosition * layerHeight;
+
+    return {
+      ...baseStyle,
+      left: 0,
+      right: 0,
+      height: lineWidth,
+      top: axisY - lineWidth / 2,
+    };
+  };
 
   // Canvas Rendering Optimization
   const isRenderingRef = useRef(false);
@@ -455,34 +507,6 @@ export const Workstation: React.FC<WorkstationProps> = ({
             ctx.beginPath();
             ctx.moveTo(0, lineY);
             ctx.lineTo(w, lineY);
-            ctx.stroke();
-        }
-        
-        ctx.restore();
-    }
-    
-    // 6. Draw Symmetry Axis if enabled
-    if (symmetryEnabled) {
-        ctx.save();
-        
-        // Set axis style
-        ctx.strokeStyle = '#00cccc';
-        ctx.globalAlpha = 0.7;
-        ctx.lineWidth = 1; // Slightly thicker than grid lines
-        
-        if (symmetryType === 'vertical') {
-            // Draw vertical axis at center
-            const centerX = Math.floor(w / 2);
-            ctx.beginPath();
-            ctx.moveTo(centerX, 0);
-            ctx.lineTo(centerX, h);
-            ctx.stroke();
-        } else {
-            // Draw horizontal axis at center
-            const centerY = Math.floor(h / 2);
-            ctx.beginPath();
-            ctx.moveTo(0, centerY);
-            ctx.lineTo(w, centerY);
             ctx.stroke();
         }
         
@@ -902,14 +926,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
         // Apply symmetry if enabled
         if (symmetryEnabled) {
             if (symmetryType === 'vertical') {
-                // Vertical symmetry - mirror over center vertical line
-                const centerX = Math.floor(layerWidth / 2);
-                const mirroredX = centerX + (centerX - x);
+                const axisPosition = Math.min(Math.max(verticalSymmetryPosition, 0), 1);
+                const axisX = axisPosition * layerWidth;
+                const mirroredX = Math.round(2 * axisX - x);
                 action(mirroredX, y);
             } else {
-                // Horizontal symmetry - mirror over center horizontal line
-                const centerY = Math.floor(layerHeight / 2);
-                const mirroredY = centerY + (centerY - y);
+                const axisPosition = Math.min(Math.max(horizontalSymmetryPosition, 0), 1);
+                const axisY = axisPosition * layerHeight;
+                const mirroredY = Math.round(2 * axisY - y);
                 action(x, mirroredY);
             }
         }
@@ -923,12 +947,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
         // Also update dirty rect for symmetry area if enabled
         if (symmetryEnabled) {
             if (symmetryType === 'vertical') {
-                const centerX = Math.floor(activeLayer.width / 2);
-                const mirroredX = centerX + (centerX - x);
+                const axisPosition = Math.min(Math.max(verticalSymmetryPosition, 0), 1);
+                const axisX = axisPosition * activeLayer.width;
+                const mirroredX = Math.round(2 * axisX - x);
                 updateDirtyRect(mirroredX, y, brushSize);
             } else {
-                const centerY = Math.floor(activeLayer.height / 2);
-                const mirroredY = centerY + (centerY - y);
+                const axisPosition = Math.min(Math.max(horizontalSymmetryPosition, 0), 1);
+                const axisY = axisPosition * activeLayer.height;
+                const mirroredY = Math.round(2 * axisY - y);
                 updateDirtyRect(x, mirroredY, brushSize);
             }
         }
@@ -966,12 +992,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
         // Also update dirty rect for symmetry area if enabled
         if (symmetryEnabled) {
             if (symmetryType === 'vertical') {
-                const centerX = Math.floor(activeLayer.width / 2);
-                const mirroredX = centerX + (centerX - x);
+                const axisPosition = Math.min(Math.max(verticalSymmetryPosition, 0), 1);
+                const axisX = axisPosition * activeLayer.width;
+                const mirroredX = Math.round(2 * axisX - x);
                 updateDirtyRect(mirroredX, y, brushSize);
             } else {
-                const centerY = Math.floor(activeLayer.height / 2);
-                const mirroredY = centerY + (centerY - y);
+                const axisPosition = Math.min(Math.max(horizontalSymmetryPosition, 0), 1);
+                const axisY = axisPosition * activeLayer.height;
+                const mirroredY = Math.round(2 * axisY - y);
                 updateDirtyRect(x, mirroredY, brushSize);
             }
         }
@@ -1136,13 +1164,13 @@ export const Workstation: React.FC<WorkstationProps> = ({
                 let symmetricY = fillY;
                 
                 if (symmetryType === 'vertical') {
-                    // Vertical symmetry - mirror over center vertical line
-                    const centerX = Math.floor(layerWidth / 2);
-                    symmetricX = centerX + (centerX - fillX);
+                    const axisPosition = Math.min(Math.max(verticalSymmetryPosition, 0), 1);
+                    const axisX = axisPosition * layerWidth;
+                    symmetricX = Math.round(2 * axisX - fillX);
                 } else {
-                    // Horizontal symmetry - mirror over center horizontal line
-                    const centerY = Math.floor(layerHeight / 2);
-                    symmetricY = centerY + (centerY - fillY);
+                    const axisPosition = Math.min(Math.max(horizontalSymmetryPosition, 0), 1);
+                    const axisY = axisPosition * layerHeight;
+                    symmetricY = Math.round(2 * axisY - fillY);
                 }
                 
                 // Only apply symmetric fill if it's a different pixel
@@ -1518,8 +1546,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
         window.removeEventListener('paste', handlePaste);
     };
   }, [loadImageFromFile]);
-
-
+  
+  const symmetryOverlayStyle = getSymmetryOverlayStyle();
+  
   return (
     <div 
         className="flex-1 bg-[#050505] relative overflow-hidden flex flex-col"
@@ -1591,10 +1620,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
             style={{ 
                 transform: `scale(${zoom})`, 
                 transformOrigin: 'center',
-                transition: isDrawing ? 'none' : 'transform 0.1s ease-out'
+                transition: isDrawing ? 'none' : 'transform 0.1s ease-out',
+                position: 'relative',
             }}
             className="shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-[#222] bg-black"
           >
+            {symmetryOverlayStyle && (
+              <div style={symmetryOverlayStyle} />
+            )}
             <canvas 
                 ref={canvasRef} 
                 className="pixelated-canvas block touch-none"

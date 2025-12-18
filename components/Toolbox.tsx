@@ -19,6 +19,10 @@ interface ToolboxProps {
   setSymmetryEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   symmetryType: 'vertical' | 'horizontal';
   setSymmetryType: React.Dispatch<React.SetStateAction<'vertical' | 'horizontal'>>;
+  verticalSymmetryPosition: number;
+  setVerticalSymmetryPosition: React.Dispatch<React.SetStateAction<number>>;
+  horizontalSymmetryPosition: number;
+  setHorizontalSymmetryPosition: React.Dispatch<React.SetStateAction<number>>;
 }
 
 // Helper: Hex <-> HSV/RGB
@@ -80,7 +84,11 @@ export const Toolbox: React.FC<ToolboxProps> = ({
   symmetryEnabled,
   setSymmetryEnabled,
   symmetryType,
-  setSymmetryType
+  setSymmetryType,
+  verticalSymmetryPosition,
+  setVerticalSymmetryPosition,
+  horizontalSymmetryPosition,
+  setHorizontalSymmetryPosition
 }) => {
   const t = LABELS[language];
   
@@ -238,31 +246,61 @@ export const Toolbox: React.FC<ToolboxProps> = ({
               
               {/* Symmetry Type */}
               {symmetryEnabled && (
-                 <div className="flex gap-1">
-                    <button 
-                       className={`flex-1 p-1 rounded border transition-colors ${symmetryType === 'vertical' ? 'border-[#00cccc] bg-[#00cccc]/20 text-[#00cccc]' : 'border-[#333] bg-[#222] text-gray-500 hover:border-gray-400'}`}
-                       onClick={() => setSymmetryType('vertical')}
-                       title={t.vertical}
-                    >
-                       <div className="flex items-center justify-center">
-                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-2a6 6 0 100-12 6 6 0 000 12zm0-4a2 2 0 110-4 2 2 0 010 4z" />
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v20" />
-                         </svg>
-                       </div>
-                    </button>
-                    <button 
-                       className={`flex-1 p-1 rounded border transition-colors ${symmetryType === 'horizontal' ? 'border-[#00cccc] bg-[#00cccc]/20 text-[#00cccc]' : 'border-[#333] bg-[#222] text-gray-500 hover:border-gray-400'}`}
-                       onClick={() => setSymmetryType('horizontal')}
-                       title={t.horizontal}
-                    >
-                       <div className="flex items-center justify-center">
-                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-2a6 6 0 100-12 6 6 0 000 12zm-4-6a2 2 0 114 0 2 2 0 01-4 0zm4 0a2 2 0 104 0 2 2 0 00-4 0z" />
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 12h20" />
-                         </svg>
-                       </div>
-                    </button>
+                 <div className="space-y-2">
+                   <div className="flex gap-1">
+                      <button 
+                         className={`flex-1 p-1 rounded border transition-colors ${symmetryType === 'vertical' ? 'border-[#00cccc] bg-[#00cccc]/20 text-[#00cccc]' : 'border-[#333] bg-[#222] text-gray-500 hover:border-gray-400'}`}
+                         onClick={() => setSymmetryType('vertical')}
+                         title={t.vertical}
+                      >
+                         <div className="flex items-center justify-center">
+                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-2a6 6 0 100-12 6 6 0 000 12zm0-4a2 2 0 110-4 2 2 0 010 4z" />
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v20" />
+                           </svg>
+                         </div>
+                      </button>
+                      <button 
+                         className={`flex-1 p-1 rounded border transition-colors ${symmetryType === 'horizontal' ? 'border-[#00cccc] bg-[#00cccc]/20 text-[#00cccc]' : 'border-[#333] bg-[#222] text-gray-500 hover:border-gray-400'}`}
+                         onClick={() => setSymmetryType('horizontal')}
+                         title={t.horizontal}
+                      >
+                         <div className="flex items-center justify-center">
+                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-2a6 6 0 100-12 6 6 0 000 12zm-4-6a2 2 0 114 0 2 2 0 01-4 0zm4 0a2 2 0 104 0 2 2 0 00-4 0z" />
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 12h20" />
+                           </svg>
+                         </div>
+                      </button>
+                   </div>
+                   <div className="mt-1">
+                      <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono mb-1">
+                        <span>LINE POS</span>
+                        <span>
+                          {Math.round(
+                            (symmetryType === 'vertical' ? verticalSymmetryPosition : horizontalSymmetryPosition) * 100
+                          )}
+                          %
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={
+                          (symmetryType === 'vertical' ? verticalSymmetryPosition : horizontalSymmetryPosition) * 100
+                        }
+                        onChange={(e) => {
+                          const v = Number(e.target.value) / 100;
+                          if (symmetryType === 'vertical') {
+                            setVerticalSymmetryPosition(v);
+                          } else {
+                            setHorizontalSymmetryPosition(v);
+                          }
+                        }}
+                        className="w-full accent-[#00cccc] h-2"
+                      />
+                   </div>
                  </div>
               )}
            </div>
