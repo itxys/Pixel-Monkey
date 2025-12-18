@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Layer, HistoryDelta, VideoProcessOptions, VideoProcessResult } from '../types';
 import { Upload, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
@@ -243,6 +243,13 @@ export const Workstation: React.FC<WorkstationProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const previousToolRef = useRef<DrawingTool>('pan');
   const [generatedBaseData, setGeneratedBaseData] = useState<ImageData | null>(null);
+  
+  // Video related state
+  const [currentVideoPath, setCurrentVideoPath] = useState<string | null>(null);
+  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
+  const [totalFrames, setTotalFrames] = useState(0);
+  const [videoInfo, setVideoInfo] = useState<{ fps: number; duration: number } | null>(null);
+  const [videoFrameData, setVideoFrameData] = useState<string | null>(null);
   
   // Move tool state
   const [isMoving, setIsMoving] = useState(false);
@@ -819,17 +826,243 @@ export const Workstation: React.FC<WorkstationProps> = ({
   }, [resizeImage, setSourceImage, setZoom]);
 
   /**
-   * 处理文件选择事件，支持图片导入
+   * 处理文件选择事件，支持图片与视频导入
    */
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
       loadImageFromFile(file);
+      return;
+    }
+
+    if (file.type.startsWith('video/')) {
+      // 检查是否在 Electron 环境中
+      if (!window.videoAPI || !window.videoAPI.processVideo) {
+        const proceed = confirm(
+          '视频处理功能需要在Electron桌面应用中运行。\n\n' +
+          '当前检测到您在浏览器环境中运行。\n\n' +
+          '是否要自动启动Electron应用？\n\n' +
+          '点击"确定"将关闭当前页面并启动桌面应用。'
+        );
+        
+        if (proceed) {
+          // 关闭当前浏览器窗口并提示启动桌面应用
+          window.close();
+          alert('请运行 "npm run electron:start" 命令启动桌面应用，然后重新上传视频文件。');
+        }
+        return;
+      }
+
+      try {
+        setProcessingState(prev => ({ ...prev, isProcessing: true }));
+        
+        // 在 Electron 环境中，将文件数据传递给主进程处理
+        const fileArrayBuffer = await file.arrayBuffer();
+        const fileData = new Uint8Array(fileArrayBuffer);
+        
+        // 创建一个临时文件路径（在主进程中处理）
+        const tempFileName = `video_${Date.now()}_${file.name}`;
+        
+        const result = await window.videoAPI.processVideo({
+          inputPath: tempFileName, // 主进程会处理实际的文件路径
+          fps: 12,
+          width: 32,
+          height: 32,
+          fileData: Array.from(fileData), // 传递文件数据
+        });
+        
+        if (result.success && result.frameCount > 0) {
+          // 尝试读取第一帧
+          const firstFrameUrl = `file://${result.outputDir}/frame_00001.png`;
+          
+          const frameImg = new Image();
+          frameImg.crossOrigin = 'anonymous';
+          
+          frameImg.onload = () => {
+            const resizedImg = resizeImage(frameImg);
+            setSourceImage(resizedImg);
+            setZoom(1);
+            
+            // 设置处理状态，显示视频帧信息
+            setProcessingState(prev => ({
+              ...prev,
+              isProcessing: false,
+              originalWidth: frameImg.width,
+              originalHeight: frameImg.height,
+              processedWidth: 32,
+              processedHeight: 32,
+              previewUrl: 'ready',
+            }));
+          };
+          
+          frameImg.onerror = () => {
+            setProcessingState(prev => ({ ...prev, isProcessing: false }));
+            alert(`视频处理成功（${result.frameCount} 帧），但无法加载第一帧。请检查输出目录：${result.outputDir}`);
+          };
+          
+          frameImg.src = firstFrameUrl;
+        } else {
+          setProcessingState(prev => ({ ...prev, isProcessing: false }));
+          alert(`视频处理失败：${result.error || '未知错误'}`);
+        }
+      } catch (error) {
+        setProcessingState(prev => ({ ...prev, isProcessing: false }));
+        alert(`视频处理过程中发生错误：${error instanceof Error ? error.message : '未知错误'}`);
+      }
+      return;
+    }
+
+    alert('不支持的文件类型。请选择图片或视频文件。');
+  };
+
+  /**
+   * 预览指定的视频帧
+   */
+  const previewVideoFrame = async (videoPath: string, frameIndex: number) => {
+    // 只检查videoAPI是否存在，不检查具体的API方法
+    if (!window.videoAPI) {
+      alert('视频预览功能需要在Electron桌面应用中运行。');
+      return;
+    }
+    
+    // 确保previewVideoFrame方法存在
+    if (!window.videoAPI.previewVideoFrame) {
+      alert('当前版本不支持视频预览功能。');
+      return;
+    }
+
+    try {
+      setProcessingState(prev => ({ ...prev, isProcessing: true }));
+      
+      const result = await window.videoAPI.previewVideoFrame({
+        inputPath: videoPath,
+        frameIndex: frameIndex,
+        width: activeLayer.width,
+        height: activeLayer.height,
+        settings: {
+          pixelSize: settings.pixelSize,
+          scale: settings.scale,
+          isGrayscale: settings.isGrayscale,
+          paletteSize: settings.paletteSize,
+          contrast: settings.contrast,
+          smoothing: settings.smoothing,
+          dithering: settings.dithering,
+          outlineColor: settings.outlineColor,
+          hasOutline: settings.hasOutline,
+          outlineThickness: settings.outlineThickness,
+          hsl: settings.hsl
+        }
+      });
+
+      if (result.success && result.frameData) {
+        setVideoFrameData(result.frameData);
+        setCurrentFrameIndex(frameIndex);
+        setTotalFrames(result.totalFrames);
+        
+        // 加载预览帧为源图像，以便进行像素化处理
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          setSourceImage(img);
+        };
+        img.src = result.frameData;
+      } else {
+        alert(`视频预览失败：${result.error || '未知错误'}`);
+      }
+    } catch (err: any) {
+      alert(`视频预览时发生异常：${err?.message || String(err)}`);
+    } finally {
+      setProcessingState(prev => ({ ...prev, isProcessing: false }));
     }
   };
 
   /**
-   * 处理拖拽事件，支持图片与视频导入
+   * 获取视频信息
+   */
+  const getVideoInfo = async (videoPath: string) => {
+    // 只检查videoAPI是否存在，不检查具体的API方法
+    if (!window.videoAPI) {
+      alert('视频信息获取功能需要在Electron桌面应用中运行。');
+      return;
+    }
+    
+    // 确保getVideoInfo方法存在
+    if (!window.videoAPI.getVideoInfo) {
+      alert('当前版本不支持视频信息获取功能。');
+      return;
+    }
+
+    try {
+      const info = await window.videoAPI.getVideoInfo(videoPath);
+      setVideoInfo(info);
+      setTotalFrames(info.totalFrames);
+    } catch (err: any) {
+      alert(`获取视频信息失败：${err?.message || String(err)}`);
+    }
+  };
+
+  /**
+   * 导出视频序列帧
+   */
+  const exportVideoSequence = async () => {
+    if (!currentVideoPath) {
+      alert('请先加载一个视频文件。');
+      return;
+    }
+
+    // 只检查videoAPI是否存在，不检查具体的API方法
+    if (!window.videoAPI) {
+      alert('视频导出功能需要在Electron桌面应用中运行。');
+      return;
+    }
+    
+    // 确保exportVideoSequence方法存在
+    if (!window.videoAPI.exportVideoSequence) {
+      alert('当前版本不支持视频导出功能。');
+      return;
+    }
+
+    try {
+      setProcessingState(prev => ({ ...prev, isProcessing: true }));
+      
+      const options: VideoProcessOptions = {
+        inputPath: currentVideoPath,
+        fps: videoInfo?.fps || 12,
+        width: activeLayer.width,
+        height: activeLayer.height,
+        settings: {
+          pixelSize: settings.pixelSize,
+          scale: settings.scale,
+          isGrayscale: settings.isGrayscale,
+          paletteSize: settings.paletteSize,
+          contrast: settings.contrast,
+          smoothing: settings.smoothing,
+          dithering: settings.dithering,
+          outlineColor: settings.outlineColor,
+          hasOutline: settings.hasOutline,
+          outlineThickness: settings.outlineThickness,
+          hsl: settings.hsl
+        }
+      };
+
+      const result = await window.videoAPI.exportVideoSequence(options);
+
+      if (result.success) {
+        alert(`序列帧导出完成。输出目录：\n${result.outputDir}\n帧数：${result.frameCount}`);
+      } else {
+        alert(`序列帧导出失败：${result.error || '未知错误'}`);
+      }
+    } catch (err: any) {
+      alert(`序列帧导出时发生异常：${err?.message || String(err)}`);
+    } finally {
+      setProcessingState(prev => ({ ...prev, isProcessing: false }));
+    }
+  };
+
+  /**
+   * 处理文件拖拽事件
    */
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -842,9 +1075,31 @@ export const Workstation: React.FC<WorkstationProps> = ({
     }
 
     if (file.type.startsWith('video/')) {
-      if (!window.videoAPI || !window.videoAPI.processVideo) {
-        alert('当前环境未启用视频处理功能。');
+      // 调试信息：检查videoAPI是否存在
+      console.log('window.videoAPI:', window.videoAPI);
+      console.log('window.videoAPI?.previewVideoFrame:', window.videoAPI?.previewVideoFrame);
+      console.log('window.videoAPI?.processVideo:', window.videoAPI?.processVideo);
+      
+      // 更宽松的检查条件，只要videoAPI存在就认为在Electron环境中
+      if (!window.videoAPI) {
+        const proceed = confirm(
+          '视频处理功能需要在Electron桌面应用中运行。\n\n' +
+          '当前检测到您在浏览器环境中运行。\n\n' +
+          '是否要自动启动Electron应用？\n\n' +
+          '点击"确定"将关闭当前页面并启动桌面应用。'
+        );
+        
+        if (proceed) {
+          window.close();
+          alert('请运行 "npm run electron:start" 命令启动桌面应用，然后重新上传视频文件。');
+        }
         return;
+      }
+      
+      // 检查是否支持previewVideoFrame API，如果不支持则使用旧的processVideo API
+      if (!window.videoAPI.previewVideoFrame) {
+        alert('当前版本不支持视频预览功能，请使用旧的视频处理方式。');
+        // 这里可以回退到旧的处理方式
       }
 
       const inputPath = (file as any).path as string | undefined;
@@ -853,34 +1108,14 @@ export const Workstation: React.FC<WorkstationProps> = ({
         return;
       }
 
-      const options: VideoProcessOptions = {
-        inputPath,
-        fps: 12,
-        width: activeLayer.width,
-        height: activeLayer.height,
-      };
-
-      try {
-        setProcessingState(prev => ({
-          ...prev,
-          isProcessing: true,
-        }));
-
-        const result: VideoProcessResult = await window.videoAPI.processVideo(options);
-
-        if (result.success) {
-          alert(`视频处理完成。输出目录：\n${result.outputDir}\n帧数：${result.frameCount}`);
-        } else {
-          alert(`视频处理失败：${result.error || '未知错误'}`);
-        }
-      } catch (err: any) {
-        alert(`视频处理时发生异常：${err?.message || String(err)}`);
-      } finally {
-        setProcessingState(prev => ({
-          ...prev,
-          isProcessing: false,
-        }));
-      }
+      // 保存当前视频路径
+      setCurrentVideoPath(inputPath);
+      
+      // 获取视频信息
+      await getVideoInfo(inputPath);
+      
+      // 预览第一帧
+      await previewVideoFrame(inputPath, 0);
     }
   };
 
@@ -1613,19 +1848,77 @@ export const Workstation: React.FC<WorkstationProps> = ({
         onPointerLeave={handlePointerUp}
     >
       
-      {/* App Title */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-2">
-        <h1 className="text-xl font-retro-title tracking-tighter text-[#ffb000] text-glow flex items-center gap-2">
-          <img src="/build/icons/pm_512.png" alt="Pixel Monkey" className="w-8 h-8" />
-          Pixel Monkey
-        </h1>
-      </div>
-      
+      {/* Video Timeline (only shown when a video is loaded) */}
+      {currentVideoPath && (
+        <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 z-20 w-[80%] bg-[#111] p-2 cassette-border">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-mono text-[#00cccc]">Frame: {currentFrameIndex + 1} / {totalFrames}</span>
+            {videoInfo && (
+              <span className="text-xs font-mono text-[#00cccc]">Time: {(currentFrameIndex / videoInfo.fps).toFixed(2)}s / {videoInfo.duration.toFixed(2)}s</span>
+            )}
+          </div>
+          <input 
+            type="range" 
+            min="0" 
+            max={Math.max(0, totalFrames - 1)} 
+            step="1" 
+            value={currentFrameIndex}
+            onChange={(e) => {
+              const newIndex = parseInt(e.target.value);
+              if (currentVideoPath) {
+                previewVideoFrame(currentVideoPath, newIndex);
+              }
+            }}
+            className="w-full h-2 bg-[#333] appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#ffb000] [&::-webkit-slider-thumb]:rounded-full"
+          />
+          <div className="flex justify-center mt-1 gap-2">
+            <button 
+              onClick={() => {
+                if (currentVideoPath && currentFrameIndex > 0) {
+                  previewVideoFrame(currentVideoPath, currentFrameIndex - 1);
+                }
+              }}
+              disabled={currentFrameIndex <= 0}
+              className="p-1 hover:bg-[#222] text-[#00cccc] border border-transparent hover:border-[#00cccc] disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Previous Frame"
+            >
+              &lt;
+            </button>
+            <button 
+              onClick={() => {
+                if (currentVideoPath && currentFrameIndex < totalFrames - 1) {
+                  previewVideoFrame(currentVideoPath, currentFrameIndex + 1);
+                }
+              }}
+              disabled={currentFrameIndex >= totalFrames - 1}
+              className="p-1 hover:bg-[#222] text-[#00cccc] border border-transparent hover:border-[#00cccc] disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Next Frame"
+            >
+              &gt;
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar overlay */}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex gap-2 bg-[#111] p-2 cassette-border items-center">
         <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-[#222] text-[#ffb000] border border-transparent hover:border-[#ffb000]" title="Import">
           <Upload className="w-5 h-5" />
         </button>
+        
+        {/* Export Sequence Button */}
+        {currentVideoPath && (
+          <>
+            <button 
+              onClick={exportVideoSequence}
+              className="p-2 hover:bg-[#222] text-[#00cccc] border border-transparent hover:border-[#00cccc]" 
+              title="Export Sequence Frames"
+            >
+              Export
+            </button>
+            <div className="w-px bg-[#333] h-6 mx-1"></div>
+          </>
+        )}
         <div className="w-px bg-[#333] h-6 mx-1"></div>
         <div className="flex items-center gap-2 px-2">
             <ZoomOut className="w-4 h-4 text-[#00cccc]" />
@@ -1655,7 +1948,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
             ref={fileInputRef} 
             onChange={handleFileChange} 
             className="hidden" 
-            accept="image/*"
+            accept="image/*,video/*"
         />
       </div>
 

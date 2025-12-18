@@ -1,0 +1,26 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.pixelmonkey.app
+productName: Pixel Monkey
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - node_modules/**/*
+win:
+  target:
+    - zip
+  icon: build/icons/icon.ico
+mac:
+  target:
+    - dmg
+    - zip
+  icon: build/icons/icon.icns
+linux:
+  target:
+    - deb
+    - rpm
+    - AppImage
+  icon: build/icons
+electronVersion: 32.3.3

@@ -1,5 +1,7 @@
 # Pixel Monkey // Retro Art Workstation
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **Pixel Monkey** is a professional-grade browser-based tool designed to convert high-resolution images into authentic, crisp pixel art. Unlike standard downscaling tools that produce blurry edges, Pixel Monkey uses advanced quantization algorithms (Dominant Color Sampling & K-Means) to ensure razor-sharp, NES/SNES-style graphics.
 
 It doubles as a full-featured pixel art editor with layer support and animation capabilities.
@@ -54,6 +56,16 @@ It doubles as a full-featured pixel art editor with layer support and animation 
     ```bash
     npm start
     ```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 

@@ -83,6 +83,20 @@ export interface VideoProcessOptions {
   fps: number;
   width: number;
   height: number;
+  fileData?: number[]; // 浏览器环境中传递文件数据
+  settings?: {
+    pixelSize: number;
+    scale: number;
+    isGrayscale: boolean;
+    paletteSize: number;
+    contrast: number;
+    smoothing: number;
+    dithering: number;
+    outlineColor: string;
+    hasOutline: boolean;
+    outlineThickness: number;
+    hsl: HSLAdjustment;
+  };
 }
 
 export interface VideoProcessResult {
@@ -92,10 +106,46 @@ export interface VideoProcessResult {
   error?: string;
 }
 
+export interface VideoPreviewOptions {
+  inputPath: string;
+  frameIndex: number;
+  width: number;
+  height: number;
+  settings?: {
+    pixelSize: number;
+    scale: number;
+    isGrayscale: boolean;
+    paletteSize: number;
+    contrast: number;
+    smoothing: number;
+    dithering: number;
+    outlineColor: string;
+    hasOutline: boolean;
+    outlineThickness: number;
+    hsl: HSLAdjustment;
+  };
+}
+
+export interface VideoPreviewResult {
+  success: boolean;
+  frameData: string; // Base64 encoded image data
+  totalFrames: number;
+  error?: string;
+}
+
+export interface VideoFrameInfo {
+  frameIndex: number;
+  time: number; // in seconds
+  imageData: string; // Base64 encoded image
+}
+
 declare global {
   interface Window {
     videoAPI?: {
       processVideo(options: VideoProcessOptions): Promise<VideoProcessResult>;
+      previewVideoFrame(options: VideoPreviewOptions): Promise<VideoPreviewResult>;
+      getVideoInfo(inputPath: string): Promise<{ totalFrames: number; fps: number; duration: number }>;
+      exportVideoSequence(options: VideoProcessOptions): Promise<VideoProcessResult>;
     };
   }
 }

@@ -212,7 +212,15 @@ export const Toolbox: React.FC<ToolboxProps> = ({
   const pureHueHex = rgbToHex(pureHueRgb.r, pureHueRgb.g, pureHueRgb.b);
 
   return (
-    <div className="w-[200px] bg-[#0a0a0a] border-r border-[#333] flex flex-col h-full z-20 overflow-y-auto scrollbar-hide shrink-0">
+    <div className="w-[260px] bg-[#0a0a0a] border-r border-[#333] flex flex-col h-full z-20 overflow-y-auto scrollbar-hide shrink-0">
+        
+        {/* App Title and Icon */}
+        <div className="p-3 bg-[#0a0a0a] border-b border-[#333] flex items-center gap-2">
+          <img src="/build/icons/pm_512.png" alt="Pixel Monkey" className="w-8 h-8" />
+          <h1 className="text-lg font-retro-title tracking-tighter text-[#ffb000] text-glow">
+            Pixel Monkey
+          </h1>
+        </div>
         
         {/* Tools Section */}
         <div className="p-3 bg-[#111] border-b border-[#333]">
