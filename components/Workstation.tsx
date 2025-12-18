@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Layer, HistoryDelta } from '../types';
+﻿import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { PixelSettings, ProcessingState, Language, LABELS, DrawingTool, ProjectState, Layer, HistoryDelta, VideoProcessOptions, VideoProcessResult } from '../types';
 import { Upload, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
 interface WorkstationProps {
@@ -305,6 +305,7 @@ export const Workstation: React.FC<WorkstationProps> = ({
     };
   };
 
+  
   // Canvas Rendering Optimization
   const isRenderingRef = useRef(false);
   const renderTimeoutRef = useRef<NodeJS.Timeout>();
@@ -799,6 +800,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
     return resizedImg;
   }, []);
 
+  /**
+   * 从本地文件读取图片并初始化为当前源图像
+   */
   const loadImageFromFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
@@ -814,6 +818,9 @@ export const Workstation: React.FC<WorkstationProps> = ({
     reader.readAsDataURL(file);
   }, [resizeImage, setSourceImage, setZoom]);
 
+  /**
+   * 处理文件选择事件，支持图片导入
+   */
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -821,11 +828,59 @@ export const Workstation: React.FC<WorkstationProps> = ({
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  /**
+   * 处理拖拽事件，支持图片与视频导入
+   */
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file) {
-        loadImageFromFile(file);
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
+      loadImageFromFile(file);
+      return;
+    }
+
+    if (file.type.startsWith('video/')) {
+      if (!window.videoAPI || !window.videoAPI.processVideo) {
+        alert('当前环境未启用视频处理功能。');
+        return;
+      }
+
+      const inputPath = (file as any).path as string | undefined;
+      if (!inputPath) {
+        alert('无法获取视频文件路径，请从本地磁盘拖入文件。');
+        return;
+      }
+
+      const options: VideoProcessOptions = {
+        inputPath,
+        fps: 12,
+        width: activeLayer.width,
+        height: activeLayer.height,
+      };
+
+      try {
+        setProcessingState(prev => ({
+          ...prev,
+          isProcessing: true,
+        }));
+
+        const result: VideoProcessResult = await window.videoAPI.processVideo(options);
+
+        if (result.success) {
+          alert(`视频处理完成。输出目录：\n${result.outputDir}\n帧数：${result.frameCount}`);
+        } else {
+          alert(`视频处理失败：${result.error || '未知错误'}`);
+        }
+      } catch (err: any) {
+        alert(`视频处理时发生异常：${err?.message || String(err)}`);
+      } finally {
+        setProcessingState(prev => ({
+          ...prev,
+          isProcessing: false,
+        }));
+      }
     }
   };
 
@@ -1558,8 +1613,16 @@ export const Workstation: React.FC<WorkstationProps> = ({
         onPointerLeave={handlePointerUp}
     >
       
+      {/* App Title */}
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-2">
+        <h1 className="text-xl font-retro-title tracking-tighter text-[#ffb000] text-glow flex items-center gap-2">
+          <img src="/build/icons/pm_512.png" alt="Pixel Monkey" className="w-8 h-8" />
+          Pixel Monkey
+        </h1>
+      </div>
+      
       {/* Toolbar overlay */}
-      <div className="absolute top-4 left-4 z-20 flex gap-2 bg-[#111] p-2 cassette-border items-center">
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex gap-2 bg-[#111] p-2 cassette-border items-center">
         <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-[#222] text-[#ffb000] border border-transparent hover:border-[#ffb000]" title="Import">
           <Upload className="w-5 h-5" />
         </button>

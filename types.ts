@@ -77,6 +77,29 @@ export interface ProcessingState {
   processedHeight: number;
 }
 
+export interface VideoProcessOptions {
+  inputPath: string;
+  outputDir?: string;
+  fps: number;
+  width: number;
+  height: number;
+}
+
+export interface VideoProcessResult {
+  success: boolean;
+  outputDir: string;
+  frameCount: number;
+  error?: string;
+}
+
+declare global {
+  interface Window {
+    videoAPI?: {
+      processVideo(options: VideoProcessOptions): Promise<VideoProcessResult>;
+    };
+  }
+}
+
 export interface AIAnalysisResult {
   title: string;
   description: string;

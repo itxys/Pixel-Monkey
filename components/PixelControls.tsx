@@ -46,11 +46,8 @@ export const PixelControls: React.FC<PixelControlsProps> = ({
   return (
     <div className="w-[350px] bg-[#0a0a0a] border-l border-[#333] flex flex-col h-full z-20 shrink-0">
       
-      {/* Header */}
-      <div className="p-4 bg-[#0f0f0f] border-b border-[#333] flex justify-between items-center shadow-lg">
-          <h1 className="text-xl font-retro-title tracking-tighter text-[#ffb000] text-glow border-l-4 border-[#ffb000] pl-2">
-            P//M
-          </h1>
+      {/* Header - Simplified */}
+      <div className="p-4 bg-[#0f0f0f] border-b border-[#333] flex justify-end items-center shadow-lg">
           <div className="flex gap-1">
             <button onClick={undo} className="p-1 hover:text-[#ffb000]" title={t.undo}>
                 <Undo className="w-4 h-4" />
