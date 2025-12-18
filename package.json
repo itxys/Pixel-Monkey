@@ -30,7 +30,8 @@
     "appId": "com.pixelmonkey.app",
     "productName": "Pixel Monkey",
     "directories": {
-      "output": "dist-electron"
+      "output": "dist-electron",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
@@ -38,13 +39,16 @@
       "node_modules/**/*"
     ],
     "win": {
-      "target": ["nsis", "zip"]
+      "target": ["nsis", "zip"],
+      "icon": "build/icons/icon.ico"
     },
     "mac": {
-      "target": ["dmg", "zip"]
+      "target": ["dmg", "zip"],
+      "icon": "build/icons/icon.icns"
     },
     "linux": {
-      "target": ["deb", "rpm", "AppImage"]
+      "target": ["deb", "rpm", "AppImage"],
+      "icon": "build/icons"
     }
   }
 }
